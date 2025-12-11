@@ -1,0 +1,12 @@
+{
+    "timer_font": {
+        "family": "arial",
+        "size_min": 22,
+        "style_min": "bold",
+        "size_sec": 18,
+        "style_sec": "bold"
+    },
+    "colours": {
+        "text_fg": "black"
+    }
+}
