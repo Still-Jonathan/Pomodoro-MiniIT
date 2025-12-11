@@ -9,7 +9,7 @@ class Pomodoro:
         self.configData = self.LoadConfig(configFile)
 
         # Timer states
-        self.totalSeconds = 10 # 25 * 60 # The default 25 minutes
+        self.totalSeconds = 25 * 60 # The default 25 minutes
         self.timerRunning = False
         self.currentJob = None
 
@@ -20,10 +20,8 @@ class Pomodoro:
               return {
                 "timer_font": {
                     "family": "arial",
-                    "size_min": 25,
-                    "style_min": "bold",
-                    "size_sec": 20,
-                    "style_sec": "bold"
+                    "size": 25,
+                    "style": "bold"
                 },
                 "colors": {
                     "text_fg": "black"
@@ -44,8 +42,8 @@ class Pomodoro:
 
         timerFont = (
             fontConfig.get("family", "arial"), 
-            fontConfig.get("size_min", 22), 
-            fontConfig.get("style_min", "bold")
+            fontConfig.get("size", 22), 
+            fontConfig.get("style", "bold")
         )
         textColour = colourConfig.get("text_fg", "black")
 
