@@ -1,0 +1,20 @@
+[
+  {
+    "name": "Pomodoro (25/5)",
+    "work": 25,
+    "break": 5,
+    "cycles": 4
+  },
+  {
+    "name": "Short Sprint (15/3)",
+    "work": 15,
+    "break": 3,
+    "cycles": 4
+  },
+  {
+    "name": "Long Focus (50/10)",
+    "work": 50,
+    "break": 10,
+    "cycles": 2
+  }
+]
