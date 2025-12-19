@@ -16,5 +16,11 @@
     "work": 50,
     "break": 10,
     "cycles": 2
+  },
+  {
+    "name": "Test 3",
+    "work": 7,
+    "break": 4,
+    "cycles": 8
   }
 ]
