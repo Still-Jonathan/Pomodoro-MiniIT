@@ -3,48 +3,61 @@ import pygame
 from threading import Thread
 import time
 
-#MUSIC SETUP
+# MUSIC SETUP
 pygame.mixer.init()
+pygame.mixer.music.set_volume(1.0)
 
 def play_music(file):
     pygame.mixer.music.load(file)
-    pygame.mixer.music.play(-1)  
+    pygame.mixer.music.play(-1)
 
 def stop_music():
     pygame.mixer.music.stop()
 
 
-#FILE PATHS
-savana = r"savana.mp3"
-rain = r"Rain.mp3"
-waterfall = r"waterfall.mp3"
+# FILE PATHS
+SOUNDS = {
+    "Savana": r"savana.mp3",
+    "Rain": r"Rain.mp3",
+    "Waterfall": r"waterfall.mp3"
+}
 
 
-#TIMER LOGIC
+# TIMER LOGIC
 class PomodoroApp:
-    def __init__(self, root):
+    def __init__(self, root, timeleft):
         self.root = root
         self.root.title("Music Pomodoro")
 
-        self.time_left = 130
+        self.time_left = timeleft
         self.running = False
+        self.current_sound = "Savana"
 
-        self.label = tk.Label(root, text="10", font=("Arial", 40))
+        self.label = tk.Label(root, text=str(timeleft), font=("Arial", 40))
         self.label.pack(pady=20)
 
-        self.start_btn = tk.Button(root, text="Start", command=self.start_savana)
+        # Music selector
+        self.sound_var = tk.StringVar(value="Savana")
+        self.sound_menu = tk.OptionMenu(
+            root, self.sound_var, *SOUNDS.keys(), command=self.change_music
+        )
+        self.sound_menu.pack(pady=5)
+
+        self.start_btn = tk.Button(root, text="Start", command=self.start_timer)
         self.start_btn.pack()
 
         self.stop_btn = tk.Button(root, text="Stop", command=self.stop_timer)
         self.stop_btn.pack()
 
-    def start_savana(self):
-        self.start_timer(savana)
+    def change_music(self, selected):
+        self.current_sound = selected
+        if self.running:
+            play_music(SOUNDS[self.current_sound])
 
-    def start_timer(self, music_file):
+    def start_timer(self):
         if not self.running:
             self.running = True
-            play_music(music_file)
+            play_music(SOUNDS[self.current_sound])
             Thread(target=self.run_timer, daemon=True).start()
 
     def stop_timer(self):
@@ -60,10 +73,11 @@ class PomodoroApp:
             remaining -= 1
 
         stop_music()
-        self.label.config(text="Done!") 
+        self.label.config(text="Done!")
 
 
-#RUN APP
+# RUN APP
 root = tk.Tk()
-app = PomodoroApp(root)
+app = PomodoroApp(root, 100)
 root.mainloop()
+
