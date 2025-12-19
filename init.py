@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import messagebox, simpledialog
+from tkinter import messagebox, simpledialog, ttk
 import time
 import json
 import os
@@ -26,7 +26,7 @@ class Pomodoro:
         # UI elements placeholders
         self.timeString = None
         self.timerLabel = None
-        self.sessionListbox = None
+        self.sessionTree = None
 
     def LoadConfig(self, configFile):
         if not os.path.exists(configFile):
@@ -74,10 +74,12 @@ class Pomodoro:
             messagebox.showerror("Error", f"Could not save sessions: {e}")
 
     def refresh_session_list(self):
-        self.sessionListbox.delete(0, tk.END)
-        for s in self.sessions:
-            label = f"{s['name']} — {s['work']}m/{s['break']}m x{s.get('cycles',1)}"
-            self.sessionListbox.insert(tk.END, label)
+        # clear existing rows
+        for iid in self.sessionTree.get_children():
+            self.sessionTree.delete(iid)
+        # insert rows with stable iids matching their index
+        for i, s in enumerate(self.sessions):
+            self.sessionTree.insert('', 'end', iid=str(i), values=(s.get('name',''), s.get('work',0), s.get('break',0), s.get('cycles',1)))
 
     def prompt_session(self, existing=None):
         # existing: dict or None
@@ -100,54 +102,71 @@ class Pomodoro:
             self.refresh_session_list()
 
     def edit_session(self):
-        sel = self.sessionListbox.curselection()
-        if not sel:
+        idx = self.get_selected_index()
+        if idx is None:
             messagebox.showinfo("Select", "Please select a session to edit.")
             return
-        idx = sel[0]
         s = self.prompt_session(existing=self.sessions[idx])
         if s:
             self.sessions[idx] = s
             self.refresh_session_list()
 
     def remove_session(self):
-        sel = self.sessionListbox.curselection()
-        if not sel:
+        idx = self.get_selected_index()
+        if idx is None:
             messagebox.showinfo("Select", "Please select a session to remove.")
             return
-        idx = sel[0]
         if messagebox.askyesno("Confirm", f"Remove session '{self.sessions[idx]['name']}'?"):
             del self.sessions[idx]
             self.refresh_session_list()
 
     def move_up(self):
-        sel = self.sessionListbox.curselection()
-        if not sel:
-            return
-        idx = sel[0]
-        if idx == 0:
+        idx = self.get_selected_index()
+        if idx is None or idx == 0:
             return
         self.sessions[idx-1], self.sessions[idx] = self.sessions[idx], self.sessions[idx-1]
         self.refresh_session_list()
-        self.sessionListbox.selection_set(idx-1)
+        self.select_index(idx-1)
 
     def move_down(self):
-        sel = self.sessionListbox.curselection()
-        if not sel:
-            return
-        idx = sel[0]
-        if idx >= len(self.sessions)-1:
+        idx = self.get_selected_index()
+        if idx is None or idx >= len(self.sessions)-1:
             return
         self.sessions[idx+1], self.sessions[idx] = self.sessions[idx], self.sessions[idx+1]
         self.refresh_session_list()
-        self.sessionListbox.selection_set(idx+1)
+        self.select_index(idx+1)
+
+    def get_selected_index(self):
+        sel = self.sessionTree.selection()
+        if not sel:
+            return None
+        try:
+            return int(sel[0])
+        except Exception:
+            # fallback to index lookup
+            children = list(self.sessionTree.get_children())
+            return children.index(sel[0]) if sel[0] in children else None
+
+    def select_index(self, idx):
+        children = list(self.sessionTree.get_children())
+        if not children:
+            return
+        if idx < 0:
+            idx = 0
+        if idx >= len(children):
+            idx = len(children) - 1
+        iid = str(idx)
+        if iid not in children:
+            iid = children[idx]
+        self.sessionTree.selection_set(iid)
+        self.sessionTree.see(iid)
 
     def StartSelectedSession(self):
-        sel = self.sessionListbox.curselection()
-        if not sel:
+        idx = self.get_selected_index()
+        if idx is None:
             messagebox.showinfo("Select", "Please select a session to start.")
             return
-        s = self.sessions[sel[0]]
+        s = self.sessions[idx]
         self.current_cycle = 1
         self.target_cycles = max(1, int(s.get('cycles', 1)))
         self.current_phase = 'work'
@@ -194,8 +213,8 @@ class Pomodoro:
             # phase finished
             if self.current_phase == 'work':
                 # start break
-                sel = self.sessionListbox.curselection()
-                s = self.sessions[sel[0]]
+                idx = self.get_selected_index()
+                s = self.sessions[idx] if idx is not None else {'break': 5}
                 self.current_phase = 'break'
                 self.totalSeconds = int(s.get('break', 5)) * 60
                 messagebox.showinfo("Phase", f"Work done — starting break ({s.get('break',5)} minutes)")
@@ -204,8 +223,8 @@ class Pomodoro:
                 # finished break
                 if self.current_cycle < self.target_cycles:
                     self.current_cycle += 1
-                    sel = self.sessionListbox.curselection()
-                    s = self.sessions[sel[0]]
+                    idx = self.get_selected_index()
+                    s = self.sessions[idx] if idx is not None else {'work': 25}
                     self.current_phase = 'work'
                     self.totalSeconds = int(s.get('work', 25)) * 60
                     messagebox.showinfo("Cycle", f"Starting cycle {self.current_cycle} of {self.target_cycles}")
@@ -236,8 +255,18 @@ class Pomodoro:
         right.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
 
         tk.Label(left, text="Sessions", font=("arial", 14, "bold")).pack()
-        self.sessionListbox = tk.Listbox(left, width=40, height=12)
-        self.sessionListbox.pack(pady=6)
+        cols = ('name', 'work', 'break', 'cycles')
+        self.sessionTree = ttk.Treeview(left, columns=cols, show='headings', height=12)
+        self.sessionTree.heading('name', text='Name')
+        self.sessionTree.column('name', width=200, anchor='w')
+        self.sessionTree.heading('work', text='Work (m)')
+        self.sessionTree.column('work', width=70, anchor='center')
+        self.sessionTree.heading('break', text='Break (m)')
+        self.sessionTree.column('break', width=70, anchor='center')
+        self.sessionTree.heading('cycles', text='Cycles')
+        self.sessionTree.column('cycles', width=60, anchor='center')
+        self.sessionTree.pack(pady=6, fill=tk.Y)
+        self.sessionTree.bind("<Double-1>", lambda e: self.edit_session())
 
         btnFrame = tk.Frame(left)
         btnFrame.pack(pady=4)
