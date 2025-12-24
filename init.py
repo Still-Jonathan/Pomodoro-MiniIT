@@ -1,311 +1,345 @@
 import tkinter as tk
-from tkinter import messagebox, simpledialog, ttk
-import time
+from tkinter import ttk
 import json
 import os
+import time
 
 
 class Pomodoro:
-    def __init__(self, root, configFile='config.json', sessionsFile='sessions.json'):
+    def __init__(self, root,
+                 configFile="config.json",
+                 sessionsFile="sessions.json",
+                 statsFile="stats.json"):
+
         self.root = root
         self.configFile = configFile
         self.sessionsFile = sessionsFile
-        self.configData = self.LoadConfig(configFile)
+        self.statsFile = statsFile
 
-        # Timer states
-        self.totalSeconds = 25 * 60
+        # ---------------- TIMER STATE ----------------
+        self.totalSeconds = 0
+        self.initialSeconds = 0
         self.timerRunning = False
         self.currentJob = None
-        self.current_phase = 'work'  # or 'break'
+        self.current_phase = "work"
         self.current_cycle = 0
         self.target_cycles = 0
+        self.session_start_time = None
 
-        # Sessions (list of dicts)
-        self.sessions = self.LoadSessions(sessionsFile)
+        # ---------------- UI STATE ----------------
+        self.dark_mode = False
+        self.timeString = tk.StringVar(value="00:00")
 
-        # UI elements placeholders
-        self.timeString = None
-        self.timerLabel = None
+        # ---------------- DATA ----------------
+        self.sessions = self.load_sessions()
+        self.stats = self.load_stats()
+
+        # ---------------- UI REFS ----------------
         self.sessionTree = None
+        self.pauseButton = None
+        self.progress = None
+        self.style = ttk.Style()
 
-    def LoadConfig(self, configFile):
-        if not os.path.exists(configFile):
-            # Default font and colors
-            return {
-                "timer_font": {"family": "arial", "size": 28, "style": "bold"},
-                "colors": {"text_fg": "black"}
-            }
-        try:
-            with open(configFile, 'r') as f:
-                return json.load(f)
-        except Exception:
-            return {
-                "timer_font": {"family": "arial", "size": 28, "style": "bold"},
-                "colors": {"text_fg": "black"}
-            }
+    # ======================================================
+    # DATA
+    # ======================================================
 
-    def LoadSessions(self, sessionsFile):
-        if not os.path.exists(sessionsFile):
-            # Create sensible defaults
-            default = [
+    def load_sessions(self):
+        if not os.path.exists(self.sessionsFile):
+            data = [
                 {"name": "Pomodoro (25/5)", "work": 25, "break": 5, "cycles": 4},
                 {"name": "Short Sprint (15/3)", "work": 15, "break": 3, "cycles": 4},
-                {"name": "Long Focus (50/10)", "work": 50, "break": 10, "cycles": 2}
+                {"name": "Long Focus (50/10)", "work": 50, "break": 10, "cycles": 2},
             ]
-            try:
-                with open(sessionsFile, 'w') as f:
-                    json.dump(default, f, indent=2)
-            except Exception:
-                pass
-            return default
+            with open(self.sessionsFile, "w") as f:
+                json.dump(data, f, indent=2)
+            return data
 
         try:
-            with open(sessionsFile, 'r') as f:
+            with open(self.sessionsFile, "r") as f:
                 return json.load(f)
         except Exception:
             return []
 
-    def SaveSessions(self):
-        try:
-            with open(self.sessionsFile, 'w') as f:
-                json.dump(self.sessions, f, indent=2)
-            messagebox.showinfo("Saved", f"Sessions saved to {self.sessionsFile}")
-        except Exception as e:
-            messagebox.showerror("Error", f"Could not save sessions: {e}")
+    def save_sessions(self):
+        with open(self.sessionsFile, "w") as f:
+            json.dump(self.sessions, f, indent=2)
 
-    def refresh_session_list(self):
-        # clear existing rows
-        for iid in self.sessionTree.get_children():
-            self.sessionTree.delete(iid)
-        # insert rows with stable iids matching their index
+    def load_stats(self):
+        if not os.path.exists(self.statsFile):
+            data = {
+                "total_focus_minutes": 0,
+                "completed_sessions": 0
+            }
+            with open(self.statsFile, "w") as f:
+                json.dump(data, f, indent=2)
+            return data
+
+        try:
+            with open(self.statsFile, "r") as f:
+                return json.load(f)
+        except Exception:
+            return {"total_focus_minutes": 0, "completed_sessions": 0}
+
+    def save_stats(self):
+        with open(self.statsFile, "w") as f:
+            json.dump(self.stats, f, indent=2)
+
+    # ======================================================
+    # TREEVIEW
+    # ======================================================
+
+    def refresh_tree(self):
+        self.sessionTree.delete(*self.sessionTree.get_children())
+
         for i, s in enumerate(self.sessions):
-            self.sessionTree.insert('', 'end', iid=str(i), values=(s.get('name',''), s.get('work',0), s.get('break',0), s.get('cycles',1)))
+            tag = f"row{i % 10}"
+            self.sessionTree.insert(
+                "", "end", iid=str(i),
+                values=(s["name"], s["work"], s["break"], s["cycles"]),
+                tags=(tag,)
+            )
 
-    def prompt_session(self, existing=None):
-        # existing: dict or None
-        name = simpledialog.askstring("Name", "Session name:", initialvalue=(existing.get('name') if existing else ''))
-        if not name:
-            return None
-        try:
-            work = int(simpledialog.askstring("Work Minutes", "Work minutes:", initialvalue=str(existing.get('work',25) if existing else '25')))
-            brk = int(simpledialog.askstring("Break Minutes", "Break minutes:", initialvalue=str(existing.get('break',5) if existing else '5')))
-            cycles = int(simpledialog.askstring("Cycles", "Number of cycles:", initialvalue=str(existing.get('cycles',4) if existing else '4')))
-        except Exception:
-            messagebox.showerror("Invalid", "Please enter valid integer values for minutes and cycles.")
-            return None
-        return {"name": name, "work": work, "break": brk, "cycles": cycles}
+    def sync_tree_to_sessions(self):
+        self.sessions.clear()
+        for iid in self.sessionTree.get_children():
+            v = self.sessionTree.item(iid, "values")
+            self.sessions.append({
+                "name": v[0],
+                "work": int(v[1]),
+                "break": int(v[2]),
+                "cycles": int(v[3])
+            })
 
-    def add_session(self):
-        s = self.prompt_session()
-        if s:
-            self.sessions.append(s)
-            self.refresh_session_list()
-
-    def edit_session(self):
-        idx = self.get_selected_index()
-        if idx is None:
-            messagebox.showinfo("Select", "Please select a session to edit.")
+    def edit_cell(self, event):
+        row = self.sessionTree.identify_row(event.y)
+        col = self.sessionTree.identify_column(event.x)
+        if not row or col == "#0":
             return
-        s = self.prompt_session(existing=self.sessions[idx])
-        if s:
-            self.sessions[idx] = s
-            self.refresh_session_list()
 
-    def remove_session(self):
-        idx = self.get_selected_index()
-        if idx is None:
-            messagebox.showinfo("Select", "Please select a session to remove.")
-            return
-        if messagebox.askyesno("Confirm", f"Remove session '{self.sessions[idx]['name']}'?"):
-            del self.sessions[idx]
-            self.refresh_session_list()
+        x, y, w, h = self.sessionTree.bbox(row, col)
+        value = self.sessionTree.set(row, col)
 
-    def move_up(self):
-        idx = self.get_selected_index()
-        if idx is None or idx == 0:
-            return
-        self.sessions[idx-1], self.sessions[idx] = self.sessions[idx], self.sessions[idx-1]
-        self.refresh_session_list()
-        self.select_index(idx-1)
+        entry = tk.Entry(self.sessionTree)
+        entry.place(x=x, y=y, width=w, height=h)
+        entry.insert(0, value)
+        entry.focus()
 
-    def move_down(self):
-        idx = self.get_selected_index()
-        if idx is None or idx >= len(self.sessions)-1:
-            return
-        self.sessions[idx+1], self.sessions[idx] = self.sessions[idx], self.sessions[idx+1]
-        self.refresh_session_list()
-        self.select_index(idx+1)
+        def save(_=None):
+            self.sessionTree.set(row, col, entry.get())
+            entry.destroy()
+            self.sync_tree_to_sessions()
 
-    def get_selected_index(self):
+        entry.bind("<Return>", save)
+        entry.bind("<FocusOut>", lambda e: entry.destroy())
+
+    def selected_index(self):
         sel = self.sessionTree.selection()
-        if not sel:
-            return None
-        try:
-            return int(sel[0])
-        except Exception:
-            # fallback to index lookup
-            children = list(self.sessionTree.get_children())
-            return children.index(sel[0]) if sel[0] in children else None
+        return int(sel[0]) if sel else None
 
-    def select_index(self, idx):
-        children = list(self.sessionTree.get_children())
-        if not children:
-            return
-        if idx < 0:
-            idx = 0
-        if idx >= len(children):
-            idx = len(children) - 1
-        iid = str(idx)
-        if iid not in children:
-            iid = children[idx]
-        self.sessionTree.selection_set(iid)
-        self.sessionTree.see(iid)
+    # ======================================================
+    # TIMER CORE (FIXED)
+    # ======================================================
 
-    def StartSelectedSession(self):
-        idx = self.get_selected_index()
-        if idx is None:
-            messagebox.showinfo("Select", "Please select a session to start.")
-            return
-        s = self.sessions[idx]
-        self.current_cycle = 1
-        self.target_cycles = max(1, int(s.get('cycles', 1)))
-        self.current_phase = 'work'
-        self.totalSeconds = int(s.get('work', 25)) * 60
-        self.update_time_display()
-        self.start_timer_loop()
-
-    def start_timer_loop(self):
-        if self.timerRunning:
-            return
-        self.timerRunning = True
-        self.run_countdown()
-
-    def pause_resume(self):
-        if self.timerRunning:
-            # pause
-            if self.currentJob:
-                self.root.after_cancel(self.currentJob)
-                self.currentJob = None
-            self.timerRunning = False
-            self.pauseButton.config(text='Resume')
-        else:
-            # resume
-            self.timerRunning = True
-            self.pauseButton.config(text='Pause')
-            self.run_countdown()
-
-    def stop_timer(self):
+    def cancel_timer_job(self):
         if self.currentJob:
             self.root.after_cancel(self.currentJob)
             self.currentJob = None
-        self.timerRunning = False
-        self.timeString.set("00:00")
-        self.pauseButton.config(text='Pause')
 
-    def run_countdown(self):
+    def start_selected(self):
+        idx = self.selected_index()
+        if idx is None:
+            return
+
+        s = self.sessions[idx]
+        self.current_cycle = 1
+        self.target_cycles = s["cycles"]
+        self.current_phase = "work"
+        self.totalSeconds = s["work"] * 60
+        self.initialSeconds = self.totalSeconds
+        self.session_start_time = time.time()
+
+        self.timerRunning = True
+        self.update_time()
+        self.run_timer()
+
+    def run_timer(self):
+        if not self.timerRunning:
+            return
+
         if self.totalSeconds > 0:
-            minutes = self.totalSeconds // 60
-            seconds = self.totalSeconds % 60
-            self.timeString.set(f"{minutes:02d}:{seconds:02d}")
             self.totalSeconds -= 1
-            self.currentJob = self.root.after(1000, self.run_countdown)
+            self.update_time()
+            self.progress["value"] = 100 * (1 - self.totalSeconds / self.initialSeconds)
+            self.currentJob = self.root.after(1000, self.run_timer)
         else:
-            # phase finished
-            if self.current_phase == 'work':
-                # start break
-                idx = self.get_selected_index()
-                s = self.sessions[idx] if idx is not None else {'break': 5}
-                self.current_phase = 'break'
-                self.totalSeconds = int(s.get('break', 5)) * 60
-                messagebox.showinfo("Phase", f"Work done — starting break ({s.get('break',5)} minutes)")
-                self.run_countdown()
+            idx = self.selected_index()
+            if idx is None:
+                return
+
+            s = self.sessions[idx]
+
+            if self.current_phase == "work":
+                self.current_phase = "break"
+                self.totalSeconds = s["break"] * 60
             else:
-                # finished break
                 if self.current_cycle < self.target_cycles:
                     self.current_cycle += 1
-                    idx = self.get_selected_index()
-                    s = self.sessions[idx] if idx is not None else {'work': 25}
-                    self.current_phase = 'work'
-                    self.totalSeconds = int(s.get('work', 25)) * 60
-                    messagebox.showinfo("Cycle", f"Starting cycle {self.current_cycle} of {self.target_cycles}")
-                    self.run_countdown()
+                    self.current_phase = "work"
+                    self.totalSeconds = s["work"] * 60
                 else:
-                    self.timerRunning = False
-                    self.timeString.set("Finished")
-                    messagebox.showinfo("Done", "All cycles completed!")
+                    self.finish_session()
+                    return
 
-    def update_time_display(self):
-        minutes = self.totalSeconds // 60
-        seconds = self.totalSeconds % 60
-        self.timeString.set(f"{minutes:02d}:{seconds:02d}")
+            self.initialSeconds = max(self.totalSeconds, 1)
+            self.run_timer()
+
+    def finish_session(self):
+        self.timerRunning = False
+        elapsed = int((time.time() - self.session_start_time) / 60)
+
+        self.stats["total_focus_minutes"] += elapsed
+        self.stats["completed_sessions"] += 1
+        self.save_stats()
+
+        self.timeString.set("Finished")
+        self.progress["value"] = 100
+
+    def pause_resume(self):
+        self.timerRunning = not self.timerRunning
+        self.pauseButton.config(text="Resume" if not self.timerRunning else "Pause")
+
+        if self.timerRunning:
+            self.run_timer()
+        else:
+            self.cancel_timer_job()
+
+    def stop_timer(self):
+        self.timerRunning = False
+        self.cancel_timer_job()
+        self.timeString.set("00:00")
+        self.progress["value"] = 0
+
+    def update_time(self):
+        m, s = divmod(self.totalSeconds, 60)
+        self.timeString.set(f"{m:02d}:{s:02d}")
+
+    # ======================================================
+    # THEME SYSTEM (SAFE)
+    # ======================================================
+
+    def toggle_theme(self):
+        was_running = self.timerRunning
+        self.timerRunning = False
+        self.cancel_timer_job()
+
+        self.dark_mode = not self.dark_mode
+        self.apply_theme()
+
+        if was_running:
+            self.timerRunning = True
+            self.run_timer()
+
+    def apply_theme(self):
+        bg = "#1e1e1e" if self.dark_mode else "#f0f0f0"
+        fg = "#ffffff" if self.dark_mode else "#000000"
+
+        self.root.configure(bg=bg)
+
+        self.style.theme_use("clam")
+        self.style.configure("Treeview",
+                              background=bg,
+                              foreground=fg,
+                              fieldbackground=bg,
+                              rowheight=26)
+
+        self.style.map("Treeview",
+                       background=[("selected", "#007acc")])
+
+        light_rows = [
+            "#ffffff", "#f2f2f2", "#e8f4ff", "#fff4e6", "#e6ffe6",
+            "#f9e6ff", "#ffe6e6", "#e6f9ff", "#f0ffe6", "#f7f7d9"
+        ]
+
+        dark_rows = [
+            "#2a2a2a", "#333333", "#003b5c", "#5c3b00", "#004d1a",
+            "#3d004d", "#4d0000", "#003d4d", "#3d4d00", "#4d4d1a"
+        ]
+
+        colors = dark_rows if self.dark_mode else light_rows
+
+        for i, c in enumerate(colors):
+            self.sessionTree.tag_configure(f"row{i}", background=c)
+
+    # ======================================================
+    # UI
+    # ======================================================
 
     def main(self):
-        # Load font config
-        fontConfig = self.configData.get("timer_font", {})
-        colourConfig = self.configData.get("colors", {})
+        left = tk.Frame(self.root)
+        left.pack(side=tk.LEFT, padx=10, pady=10)
 
-        timerFont = (fontConfig.get("family", "arial"), fontConfig.get("size", 28), fontConfig.get("style", "bold"))
-        textColour = colourConfig.get("text_fg", "black")
+        right = tk.Frame(self.root)
+        right.pack(side=tk.RIGHT, padx=10, pady=10, expand=True)
 
-        # Layout: left = sessions, right = timer
-        left = tk.Frame(self.root, padx=10, pady=10)
-        left.pack(side=tk.LEFT, fill=tk.Y)
+        tk.Label(left, text="Sessions", font=("Arial", 14, "bold")).pack()
 
-        right = tk.Frame(self.root, padx=10, pady=10)
-        right.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+        cols = ("name", "work", "break", "cycles")
+        self.sessionTree = ttk.Treeview(left, columns=cols, show="headings", height=12)
 
-        tk.Label(left, text="Sessions", font=("arial", 14, "bold")).pack()
-        cols = ('name', 'work', 'break', 'cycles')
-        self.sessionTree = ttk.Treeview(left, columns=cols, show='headings', height=12)
-        self.sessionTree.heading('name', text='Name')
-        self.sessionTree.column('name', width=200, anchor='w')
-        self.sessionTree.heading('work', text='Work (m)')
-        self.sessionTree.column('work', width=70, anchor='center')
-        self.sessionTree.heading('break', text='Break (m)')
-        self.sessionTree.column('break', width=70, anchor='center')
-        self.sessionTree.heading('cycles', text='Cycles')
-        self.sessionTree.column('cycles', width=60, anchor='center')
-        self.sessionTree.pack(pady=6, fill=tk.Y)
-        self.sessionTree.bind("<Double-1>", lambda e: self.edit_session())
+        for c in cols:
+            self.sessionTree.heading(c, text=c.capitalize())
+            self.sessionTree.column(c, width=100, anchor="center")
 
-        btnFrame = tk.Frame(left)
-        btnFrame.pack(pady=4)
+        self.sessionTree.column("name", width=220, anchor="w")
+        self.sessionTree.pack()
+        self.sessionTree.bind("<Double-1>", self.edit_cell)
 
-        tk.Button(btnFrame, text="Add", width=6, command=self.add_session).grid(row=0, column=0, padx=2)
-        tk.Button(btnFrame, text="Edit", width=6, command=self.edit_session).grid(row=0, column=1, padx=2)
-        tk.Button(btnFrame, text="Remove", width=6, command=self.remove_session).grid(row=0, column=2, padx=2)
-        tk.Button(btnFrame, text="Save", width=6, command=self.SaveSessions).grid(row=0, column=3, padx=2)
+        btns = tk.Frame(left)
+        btns.pack(pady=5)
 
-        reorder = tk.Frame(left)
-        reorder.pack(pady=4)
-        tk.Button(reorder, text="Up", width=6, command=self.move_up).grid(row=0, column=0, padx=2)
-        tk.Button(reorder, text="Down", width=6, command=self.move_down).grid(row=0, column=1, padx=2)
+        tk.Button(btns, text="Add", width=6,
+                  command=lambda: (self.sessions.append(
+                      {"name": "New Session", "work": 25, "break": 5, "cycles": 4}),
+                                   self.refresh_tree())).grid(row=0, column=0, padx=2)
 
-        # Timer display
-        self.timeString = tk.StringVar(self.root)
-        self.timeString.set("00:00")
-        self.timerLabel = tk.Label(right, textvariable=self.timeString, font=timerFont, fg=textColour)
-        self.timerLabel.pack(pady=20)
+        tk.Button(btns, text="Remove", width=6,
+                  command=lambda: (self.sessions.pop(self.selected_index())
+                                   if self.selected_index() is not None else None,
+                                   self.refresh_tree())).grid(row=0, column=1, padx=2)
 
-        controls = tk.Frame(right)
-        controls.pack(pady=6)
+        tk.Button(btns, text="Save", width=6,
+                  command=self.save_sessions).grid(row=0, column=2, padx=2)
 
-        tk.Button(controls, text="Start Selected", command=self.StartSelectedSession, width=14).grid(row=0, column=0, padx=6)
-        self.pauseButton = tk.Button(controls, text="Pause", command=self.pause_resume, width=10)
-        self.pauseButton.grid(row=0, column=1, padx=6)
-        tk.Button(controls, text="Stop", command=self.stop_timer, width=10).grid(row=0, column=2, padx=6)
+        tk.Label(right, textvariable=self.timeString,
+                 font=("Arial", 36, "bold")).pack(pady=20)
 
-        note = tk.Label(right, text="Select a session, then start. Add and reorder sessions to your preference.", font=("arial", 9), fg="gray")
-        note.pack(pady=8)
+        self.progress = ttk.Progressbar(right, length=300)
+        self.progress.pack(pady=10)
 
-        # populate list
-        self.refresh_session_list()
+        ctrl = tk.Frame(right)
+        ctrl.pack(pady=10)
+
+        tk.Button(ctrl, text="Start Selected",
+                  command=self.start_selected).grid(row=0, column=0, padx=5)
+
+        self.pauseButton = tk.Button(ctrl, text="Pause",
+                                     command=self.pause_resume)
+        self.pauseButton.grid(row=0, column=1, padx=5)
+
+        tk.Button(ctrl, text="Stop",
+                  command=self.stop_timer).grid(row=0, column=2, padx=5)
+
+        tk.Button(right, text="Toggle Theme",
+                  command=self.toggle_theme).pack(pady=5)
+
+        self.refresh_tree()
+        self.apply_theme()
 
         self.root.title("Pomodoro App — Sessions")
         self.root.mainloop()
 
 
-if __name__ == '__main__':
-    rootWindow = tk.Tk()
-    pomo = Pomodoro(rootWindow)
-    pomo.main()
+if __name__ == "__main__":
+    root = tk.Tk()
+    Pomodoro(root).main()
