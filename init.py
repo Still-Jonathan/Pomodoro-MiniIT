@@ -2,43 +2,37 @@ import tkinter as tk
 from tkinter import ttk
 import json
 import os
-import time
 
 
 class Pomodoro:
-    def __init__(self, root,
-                 configFile="config.json",
-                 sessionsFile="sessions.json",
-                 statsFile="stats.json"):
-
+    def __init__(self, root):
         self.root = root
-        self.configFile = configFile
-        self.sessionsFile = sessionsFile
-        self.statsFile = statsFile
 
-        # ---------------- TIMER STATE ----------------
+        # ---------------- FILES ----------------
+        self.sessionsFile = "sessions.json"
+        self.statsFile = "stats.json"
+
+        # ---------------- TIMER ----------------
         self.totalSeconds = 0
-        self.initialSeconds = 0
+        self.phaseTotal = 1
         self.timerRunning = False
         self.currentJob = None
-        self.current_phase = "work"
-        self.current_cycle = 0
-        self.target_cycles = 0
-        self.session_start_time = None
 
         # ---------------- UI STATE ----------------
         self.dark_mode = False
-        self.timeString = tk.StringVar(value="00:00")
+        self.row_palette_index = 0
 
         # ---------------- DATA ----------------
         self.sessions = self.load_sessions()
-        self.stats = self.load_stats()
+
+        # ---------------- UI VARS ----------------
+        self.timeString = tk.StringVar(value="00:00")
+        self.style = ttk.Style()
 
         # ---------------- UI REFS ----------------
         self.sessionTree = None
         self.pauseButton = None
         self.progress = None
-        self.style = ttk.Style()
 
     # ======================================================
     # DATA
@@ -55,35 +49,12 @@ class Pomodoro:
                 json.dump(data, f, indent=2)
             return data
 
-        try:
-            with open(self.sessionsFile, "r") as f:
-                return json.load(f)
-        except Exception:
-            return []
+        with open(self.sessionsFile, "r") as f:
+            return json.load(f)
 
     def save_sessions(self):
         with open(self.sessionsFile, "w") as f:
             json.dump(self.sessions, f, indent=2)
-
-    def load_stats(self):
-        if not os.path.exists(self.statsFile):
-            data = {
-                "total_focus_minutes": 0,
-                "completed_sessions": 0
-            }
-            with open(self.statsFile, "w") as f:
-                json.dump(data, f, indent=2)
-            return data
-
-        try:
-            with open(self.statsFile, "r") as f:
-                return json.load(f)
-        except Exception:
-            return {"total_focus_minutes": 0, "completed_sessions": 0}
-
-    def save_stats(self):
-        with open(self.statsFile, "w") as f:
-            json.dump(self.stats, f, indent=2)
 
     # ======================================================
     # TREEVIEW
@@ -91,25 +62,17 @@ class Pomodoro:
 
     def refresh_tree(self):
         self.sessionTree.delete(*self.sessionTree.get_children())
-
         for i, s in enumerate(self.sessions):
-            tag = f"row{i % 10}"
             self.sessionTree.insert(
                 "", "end", iid=str(i),
                 values=(s["name"], s["work"], s["break"], s["cycles"]),
-                tags=(tag,)
+                tags=(f"row{i % 10}",)
             )
+        self.apply_row_colours()
 
-    def sync_tree_to_sessions(self):
-        self.sessions.clear()
-        for iid in self.sessionTree.get_children():
-            v = self.sessionTree.item(iid, "values")
-            self.sessions.append({
-                "name": v[0],
-                "work": int(v[1]),
-                "break": int(v[2]),
-                "cycles": int(v[3])
-            })
+    def selected_index(self):
+        sel = self.sessionTree.selection()
+        return int(sel[0]) if sel else None
 
     def edit_cell(self, event):
         row = self.sessionTree.identify_row(event.y)
@@ -125,42 +88,66 @@ class Pomodoro:
         entry.insert(0, value)
         entry.focus()
 
-        def save(_=None):
+        def save(e=None):
             self.sessionTree.set(row, col, entry.get())
-            entry.destroy()
             self.sync_tree_to_sessions()
+            entry.destroy()
 
         entry.bind("<Return>", save)
-        entry.bind("<FocusOut>", lambda e: entry.destroy())
+        entry.bind("<FocusOut>", save)
 
-    def selected_index(self):
-        sel = self.sessionTree.selection()
-        return int(sel[0]) if sel else None
+    def sync_tree_to_sessions(self):
+        self.sessions.clear()
+        for iid in self.sessionTree.get_children():
+            v = self.sessionTree.item(iid, "values")
+            self.sessions.append({
+                "name": v[0],
+                "work": int(v[1]),
+                "break": int(v[2]),
+                "cycles": int(v[3])
+            })
 
     # ======================================================
-    # TIMER CORE (FIXED)
+    # BUTTONS
     # ======================================================
 
-    def cancel_timer_job(self):
-        if self.currentJob:
-            self.root.after_cancel(self.currentJob)
-            self.currentJob = None
+    def add_session(self):
+        self.sessions.append({"name": "New Session", "work": 25, "break": 5, "cycles": 1})
+        self.refresh_tree()
+
+    def remove_session(self):
+        idx = self.selected_index()
+        if idx is not None:
+            del self.sessions[idx]
+            self.refresh_tree()
+
+    def move_up(self):
+        idx = self.selected_index()
+        if idx and idx > 0:
+            self.sessions[idx - 1], self.sessions[idx] = self.sessions[idx], self.sessions[idx - 1]
+            self.refresh_tree()
+            self.sessionTree.selection_set(idx - 1)
+
+    def move_down(self):
+        idx = self.selected_index()
+        if idx is not None and idx < len(self.sessions) - 1:
+            self.sessions[idx + 1], self.sessions[idx] = self.sessions[idx], self.sessions[idx + 1]
+            self.refresh_tree()
+            self.sessionTree.selection_set(idx + 1)
+
+    # ======================================================
+    # TIMER (STABLE)
+    # ======================================================
 
     def start_selected(self):
         idx = self.selected_index()
         if idx is None:
             return
 
-        s = self.sessions[idx]
-        self.current_cycle = 1
-        self.target_cycles = s["cycles"]
-        self.current_phase = "work"
-        self.totalSeconds = s["work"] * 60
-        self.initialSeconds = self.totalSeconds
-        self.session_start_time = time.time()
-
+        self.totalSeconds = self.sessions[idx]["work"] * 60
+        self.phaseTotal = max(1, self.totalSeconds)
         self.timerRunning = True
-        self.update_time()
+        self.progress["value"] = 0
         self.run_timer()
 
     def run_timer(self):
@@ -170,53 +157,22 @@ class Pomodoro:
         if self.totalSeconds > 0:
             self.totalSeconds -= 1
             self.update_time()
-            self.progress["value"] = 100 * (1 - self.totalSeconds / self.initialSeconds)
+            self.progress["value"] = (self.phaseTotal - self.totalSeconds) / self.phaseTotal * 100
             self.currentJob = self.root.after(1000, self.run_timer)
         else:
-            idx = self.selected_index()
-            if idx is None:
-                return
-
-            s = self.sessions[idx]
-
-            if self.current_phase == "work":
-                self.current_phase = "break"
-                self.totalSeconds = s["break"] * 60
-            else:
-                if self.current_cycle < self.target_cycles:
-                    self.current_cycle += 1
-                    self.current_phase = "work"
-                    self.totalSeconds = s["work"] * 60
-                else:
-                    self.finish_session()
-                    return
-
-            self.initialSeconds = max(self.totalSeconds, 1)
-            self.run_timer()
-
-    def finish_session(self):
-        self.timerRunning = False
-        elapsed = int((time.time() - self.session_start_time) / 60)
-
-        self.stats["total_focus_minutes"] += elapsed
-        self.stats["completed_sessions"] += 1
-        self.save_stats()
-
-        self.timeString.set("Finished")
-        self.progress["value"] = 100
+            self.timerRunning = False
+            self.timeString.set("Finished")
 
     def pause_resume(self):
         self.timerRunning = not self.timerRunning
         self.pauseButton.config(text="Resume" if not self.timerRunning else "Pause")
-
         if self.timerRunning:
             self.run_timer()
-        else:
-            self.cancel_timer_job()
 
     def stop_timer(self):
         self.timerRunning = False
-        self.cancel_timer_job()
+        if self.currentJob:
+            self.root.after_cancel(self.currentJob)
         self.timeString.set("00:00")
         self.progress["value"] = 0
 
@@ -225,51 +181,49 @@ class Pomodoro:
         self.timeString.set(f"{m:02d}:{s:02d}")
 
     # ======================================================
-    # THEME SYSTEM (SAFE)
+    # THEMES
     # ======================================================
 
-    def toggle_theme(self):
-        was_running = self.timerRunning
-        self.timerRunning = False
-        self.cancel_timer_job()
-
+    def toggle_dark_mode(self):
         self.dark_mode = not self.dark_mode
-        self.apply_theme()
+        self.apply_ui_theme()
+        self.apply_row_colours()
 
-        if was_running:
-            self.timerRunning = True
-            self.run_timer()
+    def cycle_row_palette(self):
+        self.row_palette_index = (self.row_palette_index + 1) % 10
+        self.apply_row_colours()
 
-    def apply_theme(self):
-        bg = "#1e1e1e" if self.dark_mode else "#f0f0f0"
-        fg = "#ffffff" if self.dark_mode else "#000000"
+    def apply_ui_theme(self):
+        if self.dark_mode:
+            bg, fg = "#1e1e1e", "#ffffff"
+            tree_bg = "#252526"
+        else:
+            bg, fg = "#f0f0f0", "#000000"
+            tree_bg = "#ffffff"
 
         self.root.configure(bg=bg)
-
         self.style.theme_use("clam")
         self.style.configure("Treeview",
-                              background=bg,
-                              foreground=fg,
-                              fieldbackground=bg,
-                              rowheight=26)
+                             background=tree_bg,
+                             foreground=fg,
+                             fieldbackground=tree_bg,
+                             rowheight=26)
 
-        self.style.map("Treeview",
-                       background=[("selected", "#007acc")])
-
-        light_rows = [
-            "#ffffff", "#f2f2f2", "#e8f4ff", "#fff4e6", "#e6ffe6",
-            "#f9e6ff", "#ffe6e6", "#e6f9ff", "#f0ffe6", "#f7f7d9"
+    def apply_row_colours(self):
+        light_palettes = [
+            ["#e8f4ff", "#fff0e6", "#e6ffe6", "#f9e6ff", "#ffe6e6",
+             "#e6f9ff", "#f0ffe6", "#fffbe6", "#f2e6ff", "#e6fff7"]
         ]
 
-        dark_rows = [
-            "#2a2a2a", "#333333", "#003b5c", "#5c3b00", "#004d1a",
-            "#3d004d", "#4d0000", "#003d4d", "#3d4d00", "#4d4d1a"
+        dark_palettes = [
+            ["#264653", "#6a040f", "#2a9d8f", "#5a189a", "#7f5539",
+             "#003049", "#386641", "#4a4e69", "#540b0e", "#1b4332"]
         ]
 
-        colors = dark_rows if self.dark_mode else light_rows
+        palette = dark_palettes[0] if self.dark_mode else light_palettes[0]
 
-        for i, c in enumerate(colors):
-            self.sessionTree.tag_configure(f"row{i}", background=c)
+        for i in range(10):
+            self.sessionTree.tag_configure(f"row{i}", background=palette[(i + self.row_palette_index) % 10])
 
     # ======================================================
     # UI
@@ -286,55 +240,43 @@ class Pomodoro:
 
         cols = ("name", "work", "break", "cycles")
         self.sessionTree = ttk.Treeview(left, columns=cols, show="headings", height=12)
-
         for c in cols:
             self.sessionTree.heading(c, text=c.capitalize())
-            self.sessionTree.column(c, width=100, anchor="center")
+            self.sessionTree.column(c, width=90, anchor="center")
 
         self.sessionTree.column("name", width=220, anchor="w")
         self.sessionTree.pack()
         self.sessionTree.bind("<Double-1>", self.edit_cell)
 
         btns = tk.Frame(left)
-        btns.pack(pady=5)
+        btns.pack(pady=6)
+        tk.Button(btns, text="Add", command=self.add_session).grid(row=0, column=0, padx=2)
+        tk.Button(btns, text="Remove", command=self.remove_session).grid(row=0, column=1, padx=2)
+        tk.Button(btns, text="Save", command=self.save_sessions).grid(row=0, column=2, padx=2)
 
-        tk.Button(btns, text="Add", width=6,
-                  command=lambda: (self.sessions.append(
-                      {"name": "New Session", "work": 25, "break": 5, "cycles": 4}),
-                                   self.refresh_tree())).grid(row=0, column=0, padx=2)
-
-        tk.Button(btns, text="Remove", width=6,
-                  command=lambda: (self.sessions.pop(self.selected_index())
-                                   if self.selected_index() is not None else None,
-                                   self.refresh_tree())).grid(row=0, column=1, padx=2)
-
-        tk.Button(btns, text="Save", width=6,
-                  command=self.save_sessions).grid(row=0, column=2, padx=2)
+        move = tk.Frame(left)
+        move.pack()
+        tk.Button(move, text="Up", command=self.move_up).grid(row=0, column=0, padx=2)
+        tk.Button(move, text="Down", command=self.move_down).grid(row=0, column=1, padx=2)
 
         tk.Label(right, textvariable=self.timeString,
                  font=("Arial", 36, "bold")).pack(pady=20)
 
-        self.progress = ttk.Progressbar(right, length=300)
+        self.progress = ttk.Progressbar(right, length=320)
         self.progress.pack(pady=10)
 
         ctrl = tk.Frame(right)
-        ctrl.pack(pady=10)
-
-        tk.Button(ctrl, text="Start Selected",
-                  command=self.start_selected).grid(row=0, column=0, padx=5)
-
-        self.pauseButton = tk.Button(ctrl, text="Pause",
-                                     command=self.pause_resume)
+        ctrl.pack()
+        tk.Button(ctrl, text="Start Selected", command=self.start_selected).grid(row=0, column=0, padx=5)
+        self.pauseButton = tk.Button(ctrl, text="Pause", command=self.pause_resume)
         self.pauseButton.grid(row=0, column=1, padx=5)
+        tk.Button(ctrl, text="Stop", command=self.stop_timer).grid(row=0, column=2, padx=5)
 
-        tk.Button(ctrl, text="Stop",
-                  command=self.stop_timer).grid(row=0, column=2, padx=5)
-
-        tk.Button(right, text="Toggle Theme",
-                  command=self.toggle_theme).pack(pady=5)
+        tk.Button(right, text="No Blue Ray Light pls", command=self.toggle_dark_mode).pack(pady=4)
+        tk.Button(right, text="Change Row Colours", command=self.cycle_row_palette).pack(pady=4)
 
         self.refresh_tree()
-        self.apply_theme()
+        self.apply_ui_theme()
 
         self.root.title("Pomodoro App — Sessions")
         self.root.mainloop()
