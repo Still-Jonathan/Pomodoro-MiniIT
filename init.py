@@ -8,6 +8,19 @@ ROW_COLORS = [
     "#f0fff7", "#fffbe6", "#e6f7ff", "#f9e6ff", "#eef2f7"
 ]
 
+ROW_COLORS_DARK = [
+    "#1a5276",  # deep blue
+    "#6e2c00",  # rich brown
+    "#1e8449",  # forest green
+    "#6c3483",  # deep purple
+    "#922b21",  # crimson red
+    "#17a589",  # teal
+    "#f1c40f",  # golden yellow
+    "#2980b9",  # bright blue
+    "#9b59b6",  # magenta
+    "#34495e"   # slate gray
+]
+
 
 class Pomodoro:
     def __init__(self, root):
@@ -32,13 +45,16 @@ class Pomodoro:
         self.color_offset = 0
 
         self.timeString = tk.StringVar(value="00:00")
-        self.progressValue = tk.IntVar(value=0)
+        self.progressValue = tk.IntVar(value=0)  # 0-100
 
         self.sessions = self.load_sessions()
 
         self.build_ui()
         self.apply_ui_theme()
         self.refresh_tree()
+
+        # Add auto-save on window close
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
 
     # ---------- DATA ----------
 
@@ -66,7 +82,10 @@ class Pomodoro:
 
         for i, s in enumerate(self.sessions):
             tag = f"row{i}"
-            color = ROW_COLORS[(i + self.color_offset) % len(ROW_COLORS)]
+            if self.dark_mode:
+                color = ROW_COLORS_DARK[(i + self.color_offset) % len(ROW_COLORS_DARK)]
+            else:
+                color = ROW_COLORS[(i + self.color_offset) % len(ROW_COLORS)]
             self.tree.insert(
                 "", "end", iid=str(i),
                 values=(s["name"], s["Task Duration"], s["break"], s["cycles"]),
@@ -175,6 +194,7 @@ class Pomodoro:
                 ((self.phase_total - self.totalSeconds) / self.phase_total) * 100
             )
             self.progressValue.set(progress)
+            self.draw_progress_bar(progress)  # Update canvas bar
 
             self.currentJob = self.root.after(1000, self.run_timer)
         else:
@@ -229,10 +249,54 @@ class Pomodoro:
         self.progressValue.set(0)
         self.timeString.set("00:00")
         self.pauseBtn.config(text="Pause")
+        self.draw_progress_bar(0)
 
     def update_time(self):
         m, s = divmod(self.totalSeconds, 60)
         self.timeString.set(f"{m:02d}:{s:02d}")
+
+    # ---------- CUSTOM PROGRESS BAR WITH BEVEL EFFECT ----------
+
+    def draw_progress_bar(self, percent):
+        """Draw a custom progress bar with bevel effect using Canvas"""
+        width = 320
+        height = 20
+        fill_width = int((percent / 100) * width)
+
+        # Clear canvas
+        self.canvas.delete("all")
+
+        # Set colors based on mode
+        if self.dark_mode:
+            trough_color = "#2d2d2d"
+            fill_color = "#e040fb"     # neon purple
+            highlight_color = "#f387ff" # lighter glow for bevel
+            shadow_color = "#c729e6"    # darker for depth
+        else:
+            trough_color = "#e0e0e0"
+            fill_color = "#4caf50"      # green
+            highlight_color = "#81c784" # lighter green
+            shadow_color = "#388e3c"    # darker green
+
+        # Draw trough (background)
+        self.canvas.create_rectangle(0, 0, width, height, fill=trough_color, outline="")
+
+        # If progress > 0, draw beveled fill
+        if fill_width > 0:
+            # Main fill
+            self.canvas.create_rectangle(0, 0, fill_width, height, fill=fill_color, outline="")
+
+            # Top highlight line (bevel)
+            self.canvas.create_line(0, 0, fill_width, 0, fill=highlight_color, width=1)
+
+            # Left highlight line (bevel)
+            self.canvas.create_line(0, 0, 0, height, fill=highlight_color, width=1)
+
+            # Bottom shadow line (bevel)
+            self.canvas.create_line(0, height-1, fill_width, height-1, fill=shadow_color, width=1)
+
+            # Right shadow line (bevel)
+            self.canvas.create_line(fill_width-1, 0, fill_width-1, height, fill=shadow_color, width=1)
 
     # ---------- DARK MODE ----------
 
@@ -249,6 +313,19 @@ class Pomodoro:
             frame.configure(bg=bg)
 
         self.timerLabel.configure(bg=bg, fg=fg)
+
+        # Refresh row colors based on current mode
+        self.refresh_tree()
+
+        # Redraw progress bar with new theme
+        self.draw_progress_bar(self.progressValue.get())
+
+    # ---------- SAVE ON EXIT ----------
+
+    def on_closing(self):
+        """Save sessions and close the app"""
+        self.save_sessions()
+        self.root.destroy()
 
     # ---------- UI ----------
 
@@ -285,19 +362,17 @@ class Pomodoro:
         tk.Button(self.btns, text="Add", width=6, command=self.add_task).grid(row=0, column=0, padx=3)
         tk.Button(self.btns, text="Remove", width=6, command=self.remove_task).grid(row=0, column=1, padx=3)
         tk.Button(self.btns, text="Row Colours", width=10, command=self.cycle_row_colors).grid(row=0, column=2, padx=3)
+        tk.Button(self.btns, text="Save Now", width=8, command=self.save_sessions).grid(row=0, column=3, padx=3)  # ← NEW
 
         self.timerLabel = tk.Label(self.right, textvariable=self.timeString, font=("Arial", 32, "bold"))
         self.timerLabel.pack(pady=20)
 
-        self.progress = ttk.Progressbar(
-            self.right,
-            orient="horizontal",
-            length=320,
-            mode="determinate",
-            maximum=100,
-            variable=self.progressValue
-        )
-        self.progress.pack(pady=10)
+        # Replace ttk.Progressbar with Canvas
+        self.canvas = tk.Canvas(self.right, width=320, height=20, bg="#f0f0f0", highlightthickness=0)
+        self.canvas.pack(pady=10)
+
+        # Initial draw
+        self.draw_progress_bar(0)
 
         self.ctrl = tk.Frame(self.right)
         self.ctrl.pack(pady=10)
