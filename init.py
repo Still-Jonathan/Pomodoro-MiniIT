@@ -49,6 +49,10 @@ class Pomodoro:
 
         self.sessions = self.load_sessions()
 
+        # Task stats
+        self.statsFile = "task_stats.json"
+        self.stats = self.load_stats()
+
         self.build_ui()
         self.apply_ui_theme()
         self.refresh_tree()
@@ -74,6 +78,12 @@ class Pomodoro:
     def save_sessions(self):
         with open(self.sessionsFile, "w") as f:
             json.dump(self.sessions, f, indent=2)
+
+    def load_stats(self):
+        if not os.path.exists(self.statsFile):
+            return {}  # Return empty dict if file doesn't exist
+        with open(self.statsFile, "r") as f:
+            return json.load(f)
 
     # ---------- TREEVIEW ----------
 
