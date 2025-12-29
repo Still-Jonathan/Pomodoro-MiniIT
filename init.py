@@ -198,6 +198,12 @@ class Pomodoro:
 
         if self.totalSeconds > 0:
             self.totalSeconds -= 1
+
+            # Tracks time for 'work' phase
+            if self.current_phase == "work":
+                task_name = self.sessions[self.current_row]["name"]
+                self.stats[task_name] = self.stats.get(task_name, 0) + 1
+
             self.update_time()
 
             progress = int(
