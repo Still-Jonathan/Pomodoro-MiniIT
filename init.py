@@ -28,6 +28,7 @@ class Pomodoro:
         self.root.title("Pomodoro App — Task Tracker")
 
         self.sessionsFile = "sessions.json"
+        self.sessions = self.load_sessions()
 
         # timer state
         self.totalSeconds = 0
@@ -46,8 +47,6 @@ class Pomodoro:
 
         self.timeString = tk.StringVar(value="00:00")
         self.progressValue = tk.IntVar(value=0)  # 0-100
-
-        self.sessions = self.load_sessions()
 
         # Task stats
         self.statsFile = "task_stats.json"
@@ -84,6 +83,10 @@ class Pomodoro:
             return {}  # Return empty dict if file doesn't exist
         with open(self.statsFile, "r") as f:
             return json.load(f)
+        
+    def save_stats(self):
+        with open(self.statsFile, "w") as f:
+            json.dump(self.stats, f, indent=2)
 
     # ---------- TREEVIEW ----------
 
@@ -266,6 +269,7 @@ class Pomodoro:
         self.timeString.set("00:00")
         self.pauseBtn.config(text="Pause")
         self.draw_progress_bar(0)
+        self.save_stats()
 
     def update_time(self):
         m, s = divmod(self.totalSeconds, 60)
@@ -341,6 +345,7 @@ class Pomodoro:
     def on_closing(self):
         """Save sessions and close the app"""
         self.save_sessions()
+        self.save_stats()
         self.root.destroy()
 
     # ---------- UI ----------
