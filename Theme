@@ -6,22 +6,24 @@ THEMES = {
         "bg": "#EAD7A1",        # warm savana sand
         "fg": "#3B2F2F",        # dark brown text
         "button_bg": "#8D7539",
-        "button_fg": "#FFFFFFFF"
-        
+        "button_fg": "#FFFFFF"
+    
     },
     "water": {
         "bg": "#D0ECF2",        # light water blue
         "fg": "#003B44",        # deep blue text
         "button_bg": "#4FA3B5",
         "button_fg": "#FFFFFF"
+      
     }
 }
-#BODY
+
 
 class PomodoroApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Pomodoro Theme Demo")
+        self.root.title("Pomodoro Theme")
+        self.root.geometry("300x200")
 
         self.current_theme = "savana"
 
@@ -52,7 +54,9 @@ class PomodoroApp:
             activebackground=theme["fg"],
             activeforeground=theme["bg"]
         )
-#SWITCH
+        
+  
+
    
     def switch_theme(self):
         if self.current_theme == "savana":
@@ -62,7 +66,7 @@ class PomodoroApp:
 
         self.apply_theme(self.current_theme)
 
-#RUN
+
 
 root = tk.Tk()
 root.geometry("300x200")
