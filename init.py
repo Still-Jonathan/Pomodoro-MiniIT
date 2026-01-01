@@ -1,8 +1,9 @@
 import tkinter as tk
-from tkinter import ttk
-import json
-import os
+from tkinter import ttk, messagebox
+import json, os
 from datetime import datetime, timedelta
+
+# ================= COLORS =================
 
 ROW_COLORS = [
     "#e8f4ff", "#fff0e6", "#eaffea", "#f5e9ff", "#ffeaea",
@@ -10,18 +11,11 @@ ROW_COLORS = [
 ]
 
 ROW_COLORS_DARK = [
-    "#1a5276",  # deep blue
-    "#6e2c00",  # rich brown
-    "#1e8449",  # forest green
-    "#6c3483",  # deep purple
-    "#922b21",  # crimson red
-    "#17a589",  # teal
-    "#f1c40f",  # golden yellow
-    "#2980b9",  # bright blue
-    "#9b59b6",  # magenta
-    "#34495e"   # slate gray
+    "#1a5276", "#6e2c00", "#1e8449", "#6c3483", "#922b21",
+    "#117a65", "#7d6608", "#1f618d", "#76448a", "#2c3e50"
 ]
 
+# ================= APP =================
 
 class Pomodoro:
     def __init__(self, root):
@@ -30,8 +24,9 @@ class Pomodoro:
 
         self.sessionsFile = "sessions.json"
         self.statsFile = "stats.json"
+        self.historyFile = "history.json"
 
-        # timer state
+        # Timer state
         self.totalSeconds = 0
         self.phase_total = 0
         self.timerRunning = False
@@ -40,7 +35,7 @@ class Pomodoro:
 
         self.current_row = None
         self.current_cycle = 1
-        self.current_phase = "work"  # work / break
+        self.current_phase = "work"
 
         # UI state
         self.dark_mode = False
@@ -49,74 +44,84 @@ class Pomodoro:
         self.timeString = tk.StringVar(value="00:00")
         self.progressValue = tk.IntVar(value=0)
 
-        self.sessions = self.load_sessions()
-        self.stats = self.load_stats()
+        self.sessions = self.safe_load_json(self.sessionsFile, [])
+        self.stats = self.safe_load_json(self.statsFile, {
+            "work_minutes_today": 0,
+            "sessions_completed": 0,
+            "last_active_date": "",
+            "current_streak": 0,
+            "theme": "light"
+        })
+        self.history = self.safe_load_json(self.historyFile, [])
 
-        # Apply saved theme on startup
         if self.stats.get("theme") == "dark":
             self.dark_mode = True
 
         self.build_ui()
         self.apply_ui_theme()
         self.refresh_tree()
+        self.update_stats_label()
 
-        # Auto-save on close
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
 
-    # ---------- DATA ----------
+    # ================= SAFE JSON =================
 
-    def load_sessions(self):
-        if not os.path.exists(self.sessionsFile):
-            data = [
-                {"name": "Task 1", "Task Duration": 25, "break": 5, "cycles": 2},
-                {"name": "Task 2", "Task Duration": 15, "break": 3, "cycles": 2},
-            ]
-            with open(self.sessionsFile, "w") as f:
-                json.dump(data, f, indent=2)
-            return data
-        with open(self.sessionsFile, "r") as f:
-            return json.load(f)
+    def safe_load_json(self, path, default):
+        if not os.path.exists(path) or os.path.getsize(path) == 0:
+            with open(path, "w") as f:
+                json.dump(default, f, indent=2)
+            return default
+        try:
+            with open(path, "r") as f:
+                return json.load(f)
+        except json.JSONDecodeError:
+            messagebox.showwarning("JSON Error", f"Corrupted {path} — resetting to default.")
+            with open(path, "w") as f:
+                json.dump(default, f, indent=2)
+            return default
 
-    def save_sessions(self):
-        with open(self.sessionsFile, "w") as f:
-            json.dump(self.sessions, f, indent=2)
-
-    def load_stats(self):
-        if not os.path.exists(self.statsFile):
-            default_stats = {
-                "work_minutes_today": 0,
-                "sessions_completed": 0,
-                "last_active_date": "",
-                "current_streak": 0,
-                "theme": "light"
-            }
-            self.save_stats(default_stats)
-            return default_stats
-        with open(self.statsFile, "r") as f:
-            return json.load(f)
-
-    def save_stats(self, stats=None):
-        if stats is None:
-            stats = self.stats
-        with open(self.statsFile, "w") as f:
-            json.dump(stats, f, indent=2)
-
-    # ---------- TREEVIEW ----------
+    # ================= TREEVIEW =================
 
     def refresh_tree(self):
         self.tree.delete(*self.tree.get_children())
         for i, s in enumerate(self.sessions):
-            tag = f"row{i}"
-            color = ROW_COLORS_DARK[(i + self.color_offset) % len(ROW_COLORS_DARK)] if self.dark_mode else ROW_COLORS[(i + self.color_offset) % len(ROW_COLORS)]
-            self.tree.insert("", "end", iid=str(i), values=(s["name"], s["Task Duration"], s["break"], s["cycles"]), tags=(tag,))
-            self.tree.tag_configure(tag, background=color)
+            color = (ROW_COLORS_DARK if self.dark_mode else ROW_COLORS)[
+                (i + self.color_offset) % 10
+            ]
+            self.tree.insert(
+                "", "end", iid=str(i),
+                values=(s["name"], s["Task Duration"], s["break"], s["cycles"]),
+                tags=(f"row{i}",)
+            )
+            self.tree.tag_configure(f"row{i}", background=color)
 
     def sync_tree_to_sessions(self):
         self.sessions.clear()
         for iid in self.tree.get_children():
-            name, work, brk, cyc = self.tree.item(iid, "values")
-            self.sessions.append({"name": name, "Task Duration": int(work), "break": int(brk), "cycles": int(cyc)})
-        self.save_sessions()
+            n, w, b, c = self.tree.item(iid, "values")
+            try:
+                w_int = int(w) if w.strip() != "" else 25
+            except ValueError:
+                w_int = 25
+            try:
+                b_int = int(b) if b.strip() != "" else 5
+            except ValueError:
+                b_int = 5
+            try:
+                c_int = int(c) if c.strip() != "" else 1
+            except ValueError:
+                c_int = 1
+
+            self.sessions.append({
+                "name": n or "Unnamed Task",
+                "Task Duration": w_int,
+                "break": b_int,
+                "cycles": c_int
+            })
+        with open(self.sessionsFile, "w") as f:
+            json.dump(self.sessions, f, indent=2)
+
+    # ================= CELL EDITING WITH NUMERIC VALIDATION =================
 
     def edit_cell(self, event):
         row = self.tree.identify_row(event.y)
@@ -125,22 +130,25 @@ class Pomodoro:
             return
 
         col_index = int(col.replace("#", "")) - 1
-        if col_index not in (1, 2, 3):
-            return self.edit_text_cell(event)
-
         x, y, w, h = self.tree.bbox(row, col)
         value = self.tree.set(row, col)
 
-        entry = tk.Entry(self.tree, validate="key")
+        if col_index in (1, 2, 3):  # Numeric columns: Task Duration, Break, Cycles
+            entry = tk.Entry(self.tree, validate="key")
+            vcmd = (entry.register(self.validate_numeric_input), "%P")
+            entry.config(validatecommand=vcmd)
+        else:  # Task Name: free text
+            entry = tk.Entry(self.tree)
+
         entry.place(x=x, y=y, width=w, height=h)
         entry.insert(0, value)
         entry.focus()
 
-        vcmd = (entry.register(self.validate_numeric_input), "%P")
-        entry.config(validatecommand=vcmd)
-
         def save(_=None):
-            new_val = entry.get() or "0"
+            new_val = entry.get()
+            # For numeric fields, prevent saving empty string
+            if col_index in (1, 2, 3) and new_val == "":
+                new_val = "0"
             self.tree.set(row, col, new_val)
             entry.destroy()
             self.sync_tree_to_sessions()
@@ -148,65 +156,62 @@ class Pomodoro:
         entry.bind("<Return>", save)
         entry.bind("<FocusOut>", save)
 
-    def edit_text_cell(self, event):
-        row = self.tree.identify_row(event.y)
-        col = self.tree.identify_column(event.x)
-        x, y, w, h = self.tree.bbox(row, col)
-        value = self.tree.set(row, col)
-
-        entry = tk.Entry(self.tree)
-        entry.place(x=x, y=y, width=w, height=h)
-        entry.insert(0, value)
-        entry.focus()
-
-        def save(_=None):
-            self.tree.set(row, col, entry.get())
-            entry.destroy()
-            self.sync_tree_to_sessions()
-
-        entry.bind("<Return>", save)
-        entry.bind("<FocusOut>", save)
-
     def validate_numeric_input(self, value_if_allowed):
-        return value_if_allowed == "" or value_if_allowed.isdigit()
+        """Allow only digits (and empty during typing)"""
+        if value_if_allowed == "":
+            return True
+        return value_if_allowed.isdigit()
 
-    def selected_index(self):
-        sel = self.tree.selection()
-        return int(sel[0]) if sel else None
-
-    # ---------- TASK BUTTONS ----------
+    # ================= TASK BUTTONS =================
 
     def add_task(self):
-        self.sessions.append({"name": "New Task", "Task Duration": 25, "break": 5, "cycles": 1})
+        self.sessions.append({
+            "name": "New Task",
+            "Task Duration": 25,
+            "break": 5,
+            "cycles": 1
+        })
         self.refresh_tree()
-        self.save_sessions()
+        self.sync_tree_to_sessions()
 
     def remove_task(self):
-        idx = self.selected_index()
-        if idx is None:
+        sel = self.tree.selection()
+        if not sel:
             return
+        idx = int(sel[0])
         del self.sessions[idx]
         self.refresh_tree()
-        self.save_sessions()
+        self.sync_tree_to_sessions()
+        self.current_row = None
 
     def cycle_row_colors(self):
-        self.color_offset = (self.color_offset + 1) % len(ROW_COLORS)
+        self.color_offset = (self.color_offset + 1) % 10
         self.refresh_tree()
 
-    # ---------- TIMER ----------
+    # ================= TIMER =================
+
+    def update_time(self):
+        m, s = divmod(self.totalSeconds, 60)
+        self.timeString.set(f"{m:02d}:{s:02d}")
 
     def start_selected(self):
-        if self.timerRunning:  # Prevent spam
+        if self.timerRunning:
             return
-        idx = self.selected_index()
-        if idx is None:
+        sel = self.tree.selection()
+        if not sel:
             return
-        self.current_row = idx
+        self.current_row = int(sel[0])
         self.current_cycle = 1
         self.current_phase = "work"
         self.start_phase()
 
     def start_phase(self):
+        if self.current_row is None or self.current_row >= len(self.sessions):
+            self.timerRunning = False
+            self.timeString.set("❌ Invalid task")
+            self.root.after(2000, lambda: self.timeString.set("00:00"))
+            return
+
         task = self.sessions[self.current_row]
         self.phase_total = (task["Task Duration"] if self.current_phase == "work" else task["break"]) * 60
         self.totalSeconds = self.phase_total
@@ -215,6 +220,7 @@ class Pomodoro:
         self.paused = False
         self.update_time()
         self.run_timer()
+        self.update_paused_label()  # Hide "Paused"
 
     def run_timer(self):
         if not self.timerRunning or self.paused:
@@ -222,64 +228,66 @@ class Pomodoro:
         if self.totalSeconds > 0:
             self.totalSeconds -= 1
             self.update_time()
-            progress = int(((self.phase_total - self.totalSeconds) / self.phase_total) * 100)
-            self.progressValue.set(progress)
-            self.draw_progress_bar(progress)
+            self.draw_progress_bar(int(((self.phase_total - self.totalSeconds) / self.phase_total) * 100))
             self.currentJob = self.root.after(1000, self.run_timer)
-        else:
-            self.advance_phase()
-
-    def advance_phase(self):
-        task = self.sessions[self.current_row]
-        if self.current_phase == "work":
-            if task["break"] > 0:
-                self.current_phase = "break"
-                self.start_phase()
-            else:
-                self.finish_cycle()
         else:
             self.finish_cycle()
 
     def finish_cycle(self):
-        task = self.sessions[self.current_row]
-        if self.current_cycle < task["cycles"]:
-            self.current_cycle += 1
-            self.current_phase = "work"
-            self.start_phase()
-        else:
-            self.timerRunning = False
-            self.timeString.set("Task Done")
-            self.update_session_stats(task["Task Duration"])
-            self.root.after(15000, self.start_next_task)
+        self.timerRunning = False
+        self.timeString.set("Task Done")
+        self.record_session_completion()
+        self.root.after(15000, self.start_next_task)
 
-    def update_session_stats(self, task_duration_minutes):
-        today = datetime.now().strftime("%Y-%m-%d")
+    def record_session_completion(self):
+        # ✅ CRASH FIX: Validate current_row
+        if self.current_row is None or self.current_row >= len(self.sessions):
+            return
+
+        task = self.sessions[self.current_row]
+        duration = task["Task Duration"]
+        now = datetime.now()
+        today_str = now.strftime("%Y-%m-%d")
+
         last_date = self.stats.get("last_active_date", "")
-        self.stats["work_minutes_today"] += task_duration_minutes
+        self.stats["work_minutes_today"] += duration
         self.stats["sessions_completed"] += 1
-        if last_date == today:
+
+        if last_date == today_str:
             pass
         elif last_date == "":
             self.stats["current_streak"] = 1
         else:
-            yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
-            self.stats["current_streak"] = self.stats["current_streak"] + 1 if last_date == yesterday else 1
-        self.stats["last_active_date"] = today
+            yesterday = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+            if last_date == yesterday:
+                self.stats["current_streak"] += 1
+            else:
+                self.stats["current_streak"] = 1
+        self.stats["last_active_date"] = today_str
         self.stats["theme"] = "dark" if self.dark_mode else "light"
-        self.save_stats()
+
+        self.history.append({
+            "timestamp": now.isoformat(),
+            "task_name": task["name"],
+            "duration_minutes": duration
+        })
+
+        with open(self.statsFile, "w") as f:
+            json.dump(self.stats, f, indent=2)
+        with open(self.historyFile, "w") as f:
+            json.dump(self.history, f, indent=2)
+
         self.update_stats_label()
 
-    def update_stats_label(self):
-        s = self.stats
-        self.statsLabel.config(text=f"Today: {s['work_minutes_today']} min | Sessions: {s['sessions_completed']} | Streak: {s['current_streak']}")
-
     def start_next_task(self):
-        next_row = self.current_row + 1
-        if next_row < len(self.sessions):
-            self.tree.selection_set(str(next_row))
-            self.current_row = next_row
-            self.current_cycle = 1
-            self.current_phase = "work"
+        # ✅ CRASH FIX
+        if self.current_row is None:
+            self.timeString.set("🎉 All done!")
+            return
+        nxt = self.current_row + 1
+        if nxt < len(self.sessions):
+            self.tree.selection_set(str(nxt))
+            self.current_row = nxt
             self.start_phase()
         else:
             self.timeString.set("🎉 Congratulations! All tasks completed!")
@@ -289,61 +297,112 @@ class Pomodoro:
             return
         self.paused = not self.paused
         self.pauseBtn.config(text="Resume" if self.paused else "Pause")
+        self.update_paused_label()
         if not self.paused:
             self.run_timer()
 
     def stop_timer(self):
         self.timerRunning = False
         self.paused = False
-        self.progressValue.set(0)
         self.timeString.set("00:00")
-        self.pauseBtn.config(text="Pause")
+        self.progressValue.set(0)
         self.draw_progress_bar(0)
+        self.update_paused_label()  # Hide "Paused"
 
-    def update_time(self):
-        m, s = divmod(self.totalSeconds, 60)
-        self.timeString.set(f"{m:02d}:{s:02d}")
+    def update_paused_label(self):
+        """Show or hide the 'Paused' indicator"""
+        if self.paused:
+            self.pausedLabel.config(text="⏸️ Paused", fg="#ffcc00" if self.dark_mode else "#ff9900")
+        else:
+            self.pausedLabel.config(text="")
 
-    # ---------- CUSTOM PROGRESS BAR ----------
+    # ================= STATS & HISTORY WINDOW =================
+
+    def show_history_window(self):
+        win = tk.Toplevel(self.root)
+        win.title("📊 Pomodoro History")
+        win.geometry("600x500")
+        win.transient(self.root)
+        win.grab_set()
+
+        bg = "#1e1e1e" if self.dark_mode else "#f0f0f0"
+        fg = "#ffffff" if self.dark_mode else "#000000"
+        win.configure(bg=bg)
+
+        tk.Label(win, text="📊 Pomodoro History", font=("Arial", 16, "bold"), bg=bg, fg=fg).pack(pady=10)
+
+        tab_frame = tk.Frame(win, bg=bg)
+        tab_frame.pack(pady=5)
+
+        # Text area for history
+        text_area = tk.Text(win, wrap=tk.WORD, font=("Consolas", 10), bg="#2d2d2d" if self.dark_mode else "#ffffff", fg=fg, height=20)
+        text_area.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        tk.Button(tab_frame, text="Daily", command=lambda: self.render_history_view("daily", text_area)).pack(side=tk.LEFT, padx=5)
+        tk.Button(tab_frame, text="Monthly", command=lambda: self.render_history_view("monthly", text_area)).pack(side=tk.LEFT, padx=5)
+        tk.Button(tab_frame, text="Yearly", command=lambda: self.render_history_view("yearly", text_area)).pack(side=tk.LEFT, padx=5)
+
+        clear_btn = tk.Button(win, text="🧹 Clear History", command=lambda: self.clear_history(text_area), bg="#ff4444", fg="white")
+        clear_btn.pack(pady=5)
+
+        self.render_history_view("daily", text_area)
+
+    def render_history_view(self, view_type, text_area):
+        text_area.config(state=tk.NORMAL)
+        text_area.delete(1.0, tk.END)
+
+        now = datetime.now()
+        history_by_key = {}
+
+        for entry in self.history:
+            ts = datetime.fromisoformat(entry["timestamp"])
+            if view_type == "daily":
+                key = ts.strftime("%Y-%m-%d")
+            elif view_type == "monthly":
+                key = ts.strftime("%Y-%m")
+            elif view_type == "yearly":
+                key = ts.strftime("%Y")
+            else:
+                key = "All"
+
+            if key not in history_by_key:
+                history_by_key[key] = []
+            history_by_key[key].append(entry)
+
+        for key in sorted(history_by_key.keys(), reverse=True):
+            total_minutes = sum(e["duration_minutes"] for e in history_by_key[key])
+            if view_type == "daily":
+                label = f"📅 {key} → {total_minutes} min"
+            elif view_type == "monthly":
+                label = f"📆 {key} → {total_minutes} min"
+            else:
+                label = f"🗓️ {key} → {total_minutes} min"
+            text_area.insert(tk.END, label + "\n")
+            for e in history_by_key[key]:
+                time_str = datetime.fromisoformat(e["timestamp"]).strftime("%H:%M")
+                text_area.insert(tk.END, f"   • {e['task_name']} ({e['duration_minutes']} min) at {time_str}\n")
+            text_area.insert(tk.END, "\n")
+
+        text_area.config(state=tk.DISABLED)
+
+    def clear_history(self, text_area):
+        if messagebox.askyesno("Confirm Clear", "Are you sure you want to clear all history? This cannot be undone."):
+            self.history.clear()
+            with open(self.historyFile, "w") as f:
+                json.dump(self.history, f, indent=2)
+            self.render_history_view("daily", text_area)
+            messagebox.showinfo("Cleared", "History cleared successfully!")
+
+    # ================= UI =================
 
     def draw_progress_bar(self, percent):
-        # Use the actual canvas size so behavior adapts if changed
-        try:
-            width = int(self.canvas.cget("width"))
-            height = int(self.canvas.cget("height"))
-        except Exception:
-            width, height = 320, 20
-
-        fill_width = int((percent / 100) * width)
         self.canvas.delete("all")
-
-        trough = "#2d2d2d" if self.dark_mode else "#e0e0e0"
+        w, h = 320, 20
         fill = "#e040fb" if self.dark_mode else "#4caf50"
-        highlight = "#f387ff" if self.dark_mode else "#81c784"
-        shadow = "#c729e6" if self.dark_mode else "#388e3c"
-
-        # Make canvas background match the trough to avoid any 1px seams
-        self.canvas.config(bg=trough)
-
-        # Draw trough (full width) with matching outline to avoid border artifacts
-        self.canvas.create_rectangle(0, 0, width, height, fill=trough, outline=trough)
-
-        if fill_width > 0:
-            # Ensure at least a single pixel is drawn for small percentages
-            fw = max(1, min(fill_width, width))
-            self.canvas.create_rectangle(0, 0, fw, height, fill=fill, outline=fill)
-
-            # Draw subtle highlights/shadows only when there is room
-            if fw > 2:
-                # Top highlight
-                self.canvas.create_line(0, 0, fw, 0, fill=highlight, width=1)
-                # Bottom shadow
-                self.canvas.create_line(0, height - 1, fw, height - 1, fill=shadow, width=1)
-                # Right-edge shadow only. Avoid drawing a left-edge vertical highlight
-                # which can produce a visible thin line on some platforms/themes
-                self.canvas.create_line(fw - 1, 0, fw - 1, height, fill=shadow, width=1)
-
-    # ---------- DARK MODE ----------
+        bg = "#2d2d2d" if self.dark_mode else "#e0e0e0"
+        self.canvas.config(bg=bg)
+        self.canvas.create_rectangle(0, 0, w, h, fill=bg, outline=bg)
+        self.canvas.create_rectangle(0, 0, int(w * percent / 100), h, fill=fill, outline=fill)
 
     def toggle_dark_mode(self):
         self.dark_mode = not self.dark_mode
@@ -353,21 +412,16 @@ class Pomodoro:
         bg = "#1e1e1e" if self.dark_mode else "#f0f0f0"
         fg = "#ffffff" if self.dark_mode else "#000000"
         self.root.configure(bg=bg)
-        for frame in (self.left, self.right, self.ctrl, self.btns):
-            frame.configure(bg=bg)
+        for f in (self.left, self.right, self.ctrl, self.btns):
+            f.configure(bg=bg)
         self.timerLabel.configure(bg=bg, fg=fg)
+        self.statsLabel.configure(bg=bg, fg=fg)
+        self.pausedLabel.configure(bg=bg)
         self.refresh_tree()
         self.draw_progress_bar(self.progressValue.get())
-        self.statsLabel.config(bg=bg, fg=fg)
+        self.update_paused_label()
 
-    # ---------- EXIT ----------
-
-    def on_closing(self):
-        self.save_sessions()
-        self.save_stats()
-        self.root.destroy()
-
-    # ---------- UI ----------
+    # ================= BUILD UI =================
 
     def build_ui(self):
         self.left = tk.Frame(self.root, padx=10, pady=10)
@@ -384,7 +438,7 @@ class Pomodoro:
             show="headings",
             height=12
         )
-        for col, w in zip(("Task Name", "Task Duration", "Break", "Cycles"), (160, 120, 80, 80)):
+        for col, w in zip(self.tree["columns"], (160, 120, 80, 80)):
             self.tree.heading(col, text=col)
             self.tree.column(col, width=w, anchor="center")
         self.tree.column("Task Name", anchor="w")
@@ -393,21 +447,24 @@ class Pomodoro:
 
         self.btns = tk.Frame(self.left)
         self.btns.pack(pady=6)
-        tk.Button(self.btns, text="Add", width=6, command=self.add_task).grid(row=0, column=0, padx=3)
-        tk.Button(self.btns, text="Remove", width=6, command=self.remove_task).grid(row=0, column=1, padx=3)
-        tk.Button(self.btns, text="Row Colours", width=10, command=self.cycle_row_colors).grid(row=0, column=2, padx=3)
-        tk.Button(self.btns, text="Save Now", width=8, command=self.save_sessions).grid(row=0, column=3, padx=3)
+        tk.Button(self.btns, text="Add", command=self.add_task).grid(row=0, column=0, padx=3)
+        tk.Button(self.btns, text="Remove", command=self.remove_task).grid(row=0, column=1, padx=3)
+        tk.Button(self.btns, text="Row Colours", command=self.cycle_row_colors).grid(row=0, column=2, padx=3)
+        tk.Button(self.btns, text="History", command=self.show_history_window).grid(row=0, column=3, padx=3)
+        tk.Button(self.btns, text="Save Now", command=self.sync_tree_to_sessions).grid(row=0, column=4, padx=3)
+
+        # ✅ PAUSED LABEL — NEW
+        self.pausedLabel = tk.Label(self.right, text="", font=("Arial", 12, "bold"))
+        self.pausedLabel.pack()
 
         self.timerLabel = tk.Label(self.right, textvariable=self.timeString, font=("Arial", 32, "bold"))
-        self.timerLabel.pack(pady=20)
+        self.timerLabel.pack(pady=10)
 
-        self.statsLabel = tk.Label(self.right, text="", font=("Arial", 10), fg="#ffffff" if self.dark_mode else "#000000")
+        self.statsLabel = tk.Label(self.right, font=("Arial", 10))
         self.statsLabel.pack(pady=5)
 
-        canvas_bg = "#2d2d2d" if self.dark_mode else "#f0f0f0"
-        self.canvas = tk.Canvas(self.right, width=320, height=20, bg=canvas_bg, highlightthickness=0, bd=0, relief="flat")
+        self.canvas = tk.Canvas(self.right, width=320, height=20, highlightthickness=0)
         self.canvas.pack(pady=10)
-        self.draw_progress_bar(0)
 
         self.ctrl = tk.Frame(self.right)
         self.ctrl.pack(pady=10)
@@ -416,6 +473,22 @@ class Pomodoro:
         self.pauseBtn.grid(row=0, column=1, padx=5)
         tk.Button(self.ctrl, text="Stop", command=self.stop_timer).grid(row=0, column=2, padx=5)
         tk.Button(self.ctrl, text="No Blue Ray Light pls", command=self.toggle_dark_mode).grid(row=0, column=3, padx=5)
+
+    def update_stats_label(self):
+        s = self.stats
+        self.statsLabel.config(
+            text=f"Today: {s['work_minutes_today']} min | Sessions: {s['sessions_completed']} | Streak: {s['current_streak']}",
+            fg="#ffffff" if self.dark_mode else "#000000"
+        )
+
+    def on_closing(self):
+        with open(self.sessionsFile, "w") as f:
+            json.dump(self.sessions, f, indent=2)
+        with open(self.statsFile, "w") as f:
+            json.dump(self.stats, f, indent=2)
+        with open(self.historyFile, "w") as f:
+            json.dump(self.history, f, indent=2)
+        self.root.destroy()
 
 
 if __name__ == "__main__":
