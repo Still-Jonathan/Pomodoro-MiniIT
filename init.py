@@ -310,7 +310,7 @@ class Pomodoro:
         self.update_paused_label()  # Hide "Paused"
 
     def update_paused_label(self):
-        """Show or hide the 'Paused' indicator as neon text — dynamically"""
+        """Show or hide the 'Paused' indicator as neon text — no box"""
         if self.paused:
             if self.dark_mode:
                 text_color = "#ff0033"  # Neon red
@@ -319,7 +319,7 @@ class Pomodoro:
             self.pausedLabel.config(text="⏸️ Paused", fg=text_color)
             self.pausedLabel.pack(pady=5)  # Show it
         else:
-            self.pausedLabel.pack_forget()  # Hide it completely — no space!
+            self.pausedLabel.pack_forget()  # Hide completely — no space!
 
     # ================= STATS & HISTORY WINDOW =================
 
@@ -416,14 +416,16 @@ class Pomodoro:
     def apply_ui_theme(self):
         bg = "#1e1e1e" if self.dark_mode else "#f0f0f0"
         fg = "#ffffff" if self.dark_mode else "#000000"
+
         self.root.configure(bg=bg)
         for f in (self.left, self.right, self.ctrl, self.btns):
             f.configure(bg=bg)
         self.timerLabel.configure(bg=bg, fg=fg)
         self.statsLabel.configure(bg=bg, fg=fg)
+        self.pausedLabel.config(bg=bg)  # ← KEY: matches background → no white box
         self.refresh_tree()
         self.draw_progress_bar(self.progressValue.get())
-        self.update_paused_label()  # Ensure text color matches theme
+        self.update_paused_label()
 
     # ================= BUILD UI =================
 
@@ -457,9 +459,14 @@ class Pomodoro:
         tk.Button(self.btns, text="History", command=self.show_history_window).grid(row=0, column=3, padx=3)
         tk.Button(self.btns, text="Save Now", command=self.sync_tree_to_sessions).grid(row=0, column=4, padx=3)
 
-        # ✅ NEON TEXT ONLY — WILL BE PACKED/UNPACKED DYNAMICALLY
-        self.pausedLabel = tk.Label(self.right, text="", font=("Arial", 12, "bold"))
-        # Don't pack here — we'll pack only when needed
+        # ✅ NEON TEXT ONLY — background set in apply_ui_theme()
+        self.pausedLabel = tk.Label(
+            self.right,
+            text="",
+            font=("Arial", 12, "bold"),
+            fg="#ff9900"  # Default color
+        )
+        # Don't pack yet — we'll manage visibility manually
 
         self.timerLabel = tk.Label(self.right, textvariable=self.timeString, font=("Arial", 32, "bold"))
         self.timerLabel.pack(pady=10)
