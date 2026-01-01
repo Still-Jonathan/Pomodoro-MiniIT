@@ -1,0 +1,32 @@
+[
+  {
+    "name": "Pomodoro (25/5)",
+    "Task Duration": 25,
+    "break": 5,
+    "cycles": 4
+  },
+  {
+    "name": "Short Sprint (15/3)",
+    "Task Duration": 15,
+    "break": 3,
+    "cycles": 4
+  },
+  {
+    "name": "Long Focus (50/10)",
+    "Task Duration": 50,
+    "break": 10,
+    "cycles": 2
+  },
+  {
+    "name": "Test 1",
+    "Task Duration": 1,
+    "break": 0,
+    "cycles": 0
+  },
+  {
+    "name": "Test 2",
+    "Task Duration": 1,
+    "break": 0,
+    "cycles": 0
+  }
+]
