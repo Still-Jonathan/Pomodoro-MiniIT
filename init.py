@@ -310,16 +310,16 @@ class Pomodoro:
         self.update_paused_label()  # Hide "Paused"
 
     def update_paused_label(self):
-        """Show or hide the 'Paused' indicator with background box"""
+        """Show or hide the 'Paused' indicator as neon text — dynamically"""
         if self.paused:
-            bg_color = "#fff2cc" if not self.dark_mode else "#332a00"
-            text_color = "#ff9900" if not self.dark_mode else "#ffcc00"
-            self.pausedCanvas.config(bg=bg_color)
-            self.pausedCanvas.itemconfig(self.pausedText, text="⏸️ Paused", fill=text_color)
+            if self.dark_mode:
+                text_color = "#ff0033"  # Neon red
+            else:
+                text_color = "#ff9900"  # Neon orange
+            self.pausedLabel.config(text="⏸️ Paused", fg=text_color)
+            self.pausedLabel.pack(pady=5)  # Show it
         else:
-            bg_color = "#f0f0f0" if not self.dark_mode else "#1e1e1e"
-            self.pausedCanvas.config(bg=bg_color)
-            self.pausedCanvas.itemconfig(self.pausedText, text="")
+            self.pausedLabel.pack_forget()  # Hide it completely — no space!
 
     # ================= STATS & HISTORY WINDOW =================
 
@@ -421,10 +421,9 @@ class Pomodoro:
             f.configure(bg=bg)
         self.timerLabel.configure(bg=bg, fg=fg)
         self.statsLabel.configure(bg=bg, fg=fg)
-        self.pausedCanvas.config(bg=bg)  # ← NEW
         self.refresh_tree()
         self.draw_progress_bar(self.progressValue.get())
-        self.update_paused_label()  # ← NEW
+        self.update_paused_label()  # Ensure text color matches theme
 
     # ================= BUILD UI =================
 
@@ -458,16 +457,9 @@ class Pomodoro:
         tk.Button(self.btns, text="History", command=self.show_history_window).grid(row=0, column=3, padx=3)
         tk.Button(self.btns, text="Save Now", command=self.sync_tree_to_sessions).grid(row=0, column=4, padx=3)
 
-        # ✅ PAUSED BOX — NEW
-        self.pausedCanvas = tk.Canvas(self.right, width=100, height=30, bg="#f0f0f0", highlightthickness=0)
-        self.pausedCanvas.pack(pady=5)
-
-        self.pausedText = self.pausedCanvas.create_text(
-            50, 15,
-            text="",
-            font=("Arial", 12, "bold"),
-            fill="#ff9900"
-        )
+        # ✅ NEON TEXT ONLY — WILL BE PACKED/UNPACKED DYNAMICALLY
+        self.pausedLabel = tk.Label(self.right, text="", font=("Arial", 12, "bold"))
+        # Don't pack here — we'll pack only when needed
 
         self.timerLabel = tk.Label(self.right, textvariable=self.timeString, font=("Arial", 32, "bold"))
         self.timerLabel.pack(pady=10)
