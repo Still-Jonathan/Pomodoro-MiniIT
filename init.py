@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk
 import json
 import os
+from datetime import datetime, timedelta
 
 ROW_COLORS = [
     "#e8f4ff", "#fff0e6", "#eaffea", "#f5e9ff", "#ffeaea",
@@ -28,6 +29,7 @@ class Pomodoro:
         self.root.title("Pomodoro App — Task Tracker")
 
         self.sessionsFile = "sessions.json"
+        self.statsFile = "stats.json"
 
         # timer state
         self.totalSeconds = 0
@@ -45,15 +47,20 @@ class Pomodoro:
         self.color_offset = 0
 
         self.timeString = tk.StringVar(value="00:00")
-        self.progressValue = tk.IntVar(value=0)  # 0-100
+        self.progressValue = tk.IntVar(value=0)
 
         self.sessions = self.load_sessions()
+        self.stats = self.load_stats()
+
+        # Apply saved theme on startup
+        if self.stats.get("theme") == "dark":
+            self.dark_mode = True
 
         self.build_ui()
         self.apply_ui_theme()
         self.refresh_tree()
 
-        # Add auto-save on window close
+        # Auto-save on close
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
 
     # ---------- DATA ----------
@@ -67,7 +74,6 @@ class Pomodoro:
             with open(self.sessionsFile, "w") as f:
                 json.dump(data, f, indent=2)
             return data
-
         with open(self.sessionsFile, "r") as f:
             return json.load(f)
 
@@ -75,34 +81,41 @@ class Pomodoro:
         with open(self.sessionsFile, "w") as f:
             json.dump(self.sessions, f, indent=2)
 
+    def load_stats(self):
+        if not os.path.exists(self.statsFile):
+            default_stats = {
+                "work_minutes_today": 0,
+                "sessions_completed": 0,
+                "last_active_date": "",
+                "current_streak": 0,
+                "theme": "light"
+            }
+            self.save_stats(default_stats)
+            return default_stats
+        with open(self.statsFile, "r") as f:
+            return json.load(f)
+
+    def save_stats(self, stats=None):
+        if stats is None:
+            stats = self.stats
+        with open(self.statsFile, "w") as f:
+            json.dump(stats, f, indent=2)
+
     # ---------- TREEVIEW ----------
 
     def refresh_tree(self):
         self.tree.delete(*self.tree.get_children())
-
         for i, s in enumerate(self.sessions):
             tag = f"row{i}"
-            if self.dark_mode:
-                color = ROW_COLORS_DARK[(i + self.color_offset) % len(ROW_COLORS_DARK)]
-            else:
-                color = ROW_COLORS[(i + self.color_offset) % len(ROW_COLORS)]
-            self.tree.insert(
-                "", "end", iid=str(i),
-                values=(s["name"], s["Task Duration"], s["break"], s["cycles"]),
-                tags=(tag,)
-            )
+            color = ROW_COLORS_DARK[(i + self.color_offset) % len(ROW_COLORS_DARK)] if self.dark_mode else ROW_COLORS[(i + self.color_offset) % len(ROW_COLORS)]
+            self.tree.insert("", "end", iid=str(i), values=(s["name"], s["Task Duration"], s["break"], s["cycles"]), tags=(tag,))
             self.tree.tag_configure(tag, background=color)
 
     def sync_tree_to_sessions(self):
         self.sessions.clear()
         for iid in self.tree.get_children():
             name, work, brk, cyc = self.tree.item(iid, "values")
-            self.sessions.append({
-                "name": name,
-                "Task Duration": int(work),
-                "break": int(brk),
-                "cycles": int(cyc)
-            })
+            self.sessions.append({"name": name, "Task Duration": int(work), "break": int(brk), "cycles": int(cyc)})
         self.save_sessions()
 
     def edit_cell(self, event):
@@ -111,9 +124,8 @@ class Pomodoro:
         if not row or col == "#0":
             return
 
-        # Only allow numbers in columns 1, 2, 3 ("Task Duration", "Break", "Cycles")
         col_index = int(col.replace("#", "")) - 1
-        if col_index not in (1, 2, 3):  # column 0 is "Task Name" → allow text
+        if col_index not in (1, 2, 3):
             return self.edit_text_cell(event)
 
         x, y, w, h = self.tree.bbox(row, col)
@@ -124,15 +136,11 @@ class Pomodoro:
         entry.insert(0, value)
         entry.focus()
 
-        # Register validation command
         vcmd = (entry.register(self.validate_numeric_input), "%P")
         entry.config(validatecommand=vcmd)
 
         def save(_=None):
-            new_val = entry.get()
-            # Ensure at least "0" if empty
-            if new_val == "":
-                new_val = "0"
+            new_val = entry.get() or "0"
             self.tree.set(row, col, new_val)
             entry.destroy()
             self.sync_tree_to_sessions()
@@ -141,7 +149,6 @@ class Pomodoro:
         entry.bind("<FocusOut>", save)
 
     def edit_text_cell(self, event):
-        """Allow free text in 'Task Name' column"""
         row = self.tree.identify_row(event.y)
         col = self.tree.identify_column(event.x)
         x, y, w, h = self.tree.bbox(row, col)
@@ -161,10 +168,7 @@ class Pomodoro:
         entry.bind("<FocusOut>", save)
 
     def validate_numeric_input(self, value_if_allowed):
-        """Allow only digits (and empty string during typing)"""
-        if value_if_allowed == "":
-            return True
-        return value_if_allowed.isdigit()
+        return value_if_allowed == "" or value_if_allowed.isdigit()
 
     def selected_index(self):
         sel = self.tree.selection()
@@ -173,12 +177,7 @@ class Pomodoro:
     # ---------- TASK BUTTONS ----------
 
     def add_task(self):
-        self.sessions.append({
-            "name": "New Task",
-            "Task Duration": 25,
-            "break": 5,
-            "cycles": 1
-        })
+        self.sessions.append({"name": "New Task", "Task Duration": 25, "break": 5, "cycles": 1})
         self.refresh_tree()
         self.save_sessions()
 
@@ -197,14 +196,11 @@ class Pomodoro:
     # ---------- TIMER ----------
 
     def start_selected(self):
-        # ✅ FIX 1: Prevent starting if timer is already running
-        if self.timerRunning:
+        if self.timerRunning:  # Prevent spam
             return
-
         idx = self.selected_index()
         if idx is None:
             return
-
         self.current_row = idx
         self.current_cycle = 1
         self.current_phase = "work"
@@ -212,12 +208,7 @@ class Pomodoro:
 
     def start_phase(self):
         task = self.sessions[self.current_row]
-
-        if self.current_phase == "work":
-            self.phase_total = task["Task Duration"] * 60
-        else:
-            self.phase_total = task["break"] * 60
-
+        self.phase_total = (task["Task Duration"] if self.current_phase == "work" else task["break"]) * 60
         self.totalSeconds = self.phase_total
         self.progressValue.set(0)
         self.timerRunning = True
@@ -228,24 +219,18 @@ class Pomodoro:
     def run_timer(self):
         if not self.timerRunning or self.paused:
             return
-
         if self.totalSeconds > 0:
             self.totalSeconds -= 1
             self.update_time()
-
-            progress = int(
-                ((self.phase_total - self.totalSeconds) / self.phase_total) * 100
-            )
+            progress = int(((self.phase_total - self.totalSeconds) / self.phase_total) * 100)
             self.progressValue.set(progress)
-            self.draw_progress_bar(progress)  # Update canvas bar
-
+            self.draw_progress_bar(progress)
             self.currentJob = self.root.after(1000, self.run_timer)
         else:
             self.advance_phase()
 
     def advance_phase(self):
         task = self.sessions[self.current_row]
-
         if self.current_phase == "work":
             if task["break"] > 0:
                 self.current_phase = "break"
@@ -257,7 +242,6 @@ class Pomodoro:
 
     def finish_cycle(self):
         task = self.sessions[self.current_row]
-
         if self.current_cycle < task["cycles"]:
             self.current_cycle += 1
             self.current_phase = "work"
@@ -265,7 +249,29 @@ class Pomodoro:
         else:
             self.timerRunning = False
             self.timeString.set("Task Done")
+            self.update_session_stats(task["Task Duration"])
             self.root.after(15000, self.start_next_task)
+
+    def update_session_stats(self, task_duration_minutes):
+        today = datetime.now().strftime("%Y-%m-%d")
+        last_date = self.stats.get("last_active_date", "")
+        self.stats["work_minutes_today"] += task_duration_minutes
+        self.stats["sessions_completed"] += 1
+        if last_date == today:
+            pass
+        elif last_date == "":
+            self.stats["current_streak"] = 1
+        else:
+            yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+            self.stats["current_streak"] = self.stats["current_streak"] + 1 if last_date == yesterday else 1
+        self.stats["last_active_date"] = today
+        self.stats["theme"] = "dark" if self.dark_mode else "light"
+        self.save_stats()
+        self.update_stats_label()
+
+    def update_stats_label(self):
+        s = self.stats
+        self.statsLabel.config(text=f"Today: {s['work_minutes_today']} min | Sessions: {s['sessions_completed']} | Streak: {s['current_streak']}")
 
     def start_next_task(self):
         next_row = self.current_row + 1
@@ -298,48 +304,44 @@ class Pomodoro:
         m, s = divmod(self.totalSeconds, 60)
         self.timeString.set(f"{m:02d}:{s:02d}")
 
-    # ---------- CUSTOM PROGRESS BAR WITH BEVEL EFFECT ----------
+    # ---------- CUSTOM PROGRESS BAR ----------
 
     def draw_progress_bar(self, percent):
-        """Draw a custom progress bar with bevel effect using Canvas"""
-        width = 320
-        height = 20
-        fill_width = int((percent / 100) * width)
+        # Use the actual canvas size so behavior adapts if changed
+        try:
+            width = int(self.canvas.cget("width"))
+            height = int(self.canvas.cget("height"))
+        except Exception:
+            width, height = 320, 20
 
-        # Clear canvas
+        fill_width = int((percent / 100) * width)
         self.canvas.delete("all")
 
-        # Set colors based on mode
-        if self.dark_mode:
-            trough_color = "#2d2d2d"
-            fill_color = "#e040fb"     # neon purple
-            highlight_color = "#f387ff" # lighter glow for bevel
-            shadow_color = "#c729e6"    # darker for depth
-        else:
-            trough_color = "#e0e0e0"
-            fill_color = "#4caf50"      # green
-            highlight_color = "#81c784" # lighter green
-            shadow_color = "#388e3c"    # darker green
+        trough = "#2d2d2d" if self.dark_mode else "#e0e0e0"
+        fill = "#e040fb" if self.dark_mode else "#4caf50"
+        highlight = "#f387ff" if self.dark_mode else "#81c784"
+        shadow = "#c729e6" if self.dark_mode else "#388e3c"
 
-        # Draw trough (background)
-        self.canvas.create_rectangle(0, 0, width, height, fill=trough_color, outline="")
+        # Make canvas background match the trough to avoid any 1px seams
+        self.canvas.config(bg=trough)
 
-        # If progress > 0, draw beveled fill
+        # Draw trough (full width) with matching outline to avoid border artifacts
+        self.canvas.create_rectangle(0, 0, width, height, fill=trough, outline=trough)
+
         if fill_width > 0:
-            # Main fill
-            self.canvas.create_rectangle(0, 0, fill_width, height, fill=fill_color, outline="")
+            # Ensure at least a single pixel is drawn for small percentages
+            fw = max(1, min(fill_width, width))
+            self.canvas.create_rectangle(0, 0, fw, height, fill=fill, outline=fill)
 
-            # Top highlight line (bevel)
-            self.canvas.create_line(0, 0, fill_width, 0, fill=highlight_color, width=1)
-
-            # Left highlight line (bevel)
-            self.canvas.create_line(0, 0, 0, height, fill=highlight_color, width=1)
-
-            # Bottom shadow line (bevel)
-            self.canvas.create_line(0, height-1, fill_width, height-1, fill=shadow_color, width=1)
-
-            # Right shadow line (bevel)
-            self.canvas.create_line(fill_width-1, 0, fill_width-1, height, fill=shadow_color, width=1)
+            # Draw subtle highlights/shadows only when there is room
+            if fw > 2:
+                # Top highlight
+                self.canvas.create_line(0, 0, fw, 0, fill=highlight, width=1)
+                # Bottom shadow
+                self.canvas.create_line(0, height - 1, fw, height - 1, fill=shadow, width=1)
+                # Right-edge shadow only. Avoid drawing a left-edge vertical highlight
+                # which can produce a visible thin line on some platforms/themes
+                self.canvas.create_line(fw - 1, 0, fw - 1, height, fill=shadow, width=1)
 
     # ---------- DARK MODE ----------
 
@@ -350,24 +352,19 @@ class Pomodoro:
     def apply_ui_theme(self):
         bg = "#1e1e1e" if self.dark_mode else "#f0f0f0"
         fg = "#ffffff" if self.dark_mode else "#000000"
-
         self.root.configure(bg=bg)
         for frame in (self.left, self.right, self.ctrl, self.btns):
             frame.configure(bg=bg)
-
         self.timerLabel.configure(bg=bg, fg=fg)
-
-        # Refresh row colors based on current mode
         self.refresh_tree()
-
-        # Redraw progress bar with new theme
         self.draw_progress_bar(self.progressValue.get())
+        self.statsLabel.config(bg=bg, fg=fg)
 
-    # ---------- SAVE ON EXIT ----------
+    # ---------- EXIT ----------
 
     def on_closing(self):
-        """Save sessions and close the app"""
         self.save_sessions()
+        self.save_stats()
         self.root.destroy()
 
     # ---------- UI ----------
@@ -387,21 +384,15 @@ class Pomodoro:
             show="headings",
             height=12
         )
-
-        for col, w in zip(
-            ("Task Name", "Task Duration", "Break", "Cycles"),
-            (160, 120, 80, 80)
-        ):
+        for col, w in zip(("Task Name", "Task Duration", "Break", "Cycles"), (160, 120, 80, 80)):
             self.tree.heading(col, text=col)
             self.tree.column(col, width=w, anchor="center")
-
         self.tree.column("Task Name", anchor="w")
         self.tree.pack()
         self.tree.bind("<Double-1>", self.edit_cell)
 
         self.btns = tk.Frame(self.left)
         self.btns.pack(pady=6)
-
         tk.Button(self.btns, text="Add", width=6, command=self.add_task).grid(row=0, column=0, padx=3)
         tk.Button(self.btns, text="Remove", width=6, command=self.remove_task).grid(row=0, column=1, padx=3)
         tk.Button(self.btns, text="Row Colours", width=10, command=self.cycle_row_colors).grid(row=0, column=2, padx=3)
@@ -410,16 +401,16 @@ class Pomodoro:
         self.timerLabel = tk.Label(self.right, textvariable=self.timeString, font=("Arial", 32, "bold"))
         self.timerLabel.pack(pady=20)
 
-        # Replace ttk.Progressbar with Canvas
-        self.canvas = tk.Canvas(self.right, width=320, height=20, bg="#f0f0f0", highlightthickness=0)
-        self.canvas.pack(pady=10)
+        self.statsLabel = tk.Label(self.right, text="", font=("Arial", 10), fg="#ffffff" if self.dark_mode else "#000000")
+        self.statsLabel.pack(pady=5)
 
-        # Initial draw
+        canvas_bg = "#2d2d2d" if self.dark_mode else "#f0f0f0"
+        self.canvas = tk.Canvas(self.right, width=320, height=20, bg=canvas_bg, highlightthickness=0, bd=0, relief="flat")
+        self.canvas.pack(pady=10)
         self.draw_progress_bar(0)
 
         self.ctrl = tk.Frame(self.right)
         self.ctrl.pack(pady=10)
-
         tk.Button(self.ctrl, text="Start", command=self.start_selected).grid(row=0, column=0, padx=5)
         self.pauseBtn = tk.Button(self.ctrl, text="Pause", command=self.pause_resume)
         self.pauseBtn.grid(row=0, column=1, padx=5)
