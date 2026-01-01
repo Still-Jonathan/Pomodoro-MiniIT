@@ -16,9 +16,9 @@ def stop_music():
 
 
 SOUNDS = {
-    "Savana": r"savana.mp3",
-    "Rain": r"Rain.mp3",
-    "Waterfall": r"waterfall.mp3"
+    "Savana": r"Audio/savana.mp3",
+    "Rain": r"Audio/Rain.mp3",
+    "Waterfall": r"Audio/waterfall.mp3"
 }
 
 
