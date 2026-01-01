@@ -285,26 +285,36 @@ class Pomodoro:
             # Right shadow line (bevel)
             self.canvas.create_line(fill_width-1, 0, fill_width-1, height, fill=shadow_color, width=1)
 
-    # ---------- DARK MODE ----------
+    # ---------- Themes ----------
 
-    def toggle_dark_mode(self):
-        self.dark_mode = not self.dark_mode
+    def switch_theme(self):
+        if self.current_theme == "savana":
+            self.current_theme = "water"
+        else:
+            self.current_theme = "savana"
+
         self.apply_ui_theme()
 
     def apply_ui_theme(self):
-        bg = "#1e1e1e" if self.dark_mode else "#f0f0f0"
-        fg = "#ffffff" if self.dark_mode else "#000000"
+        theme = themeXT.THEMES[self.current_theme_key]
+
+        bg = theme["bg"]
+        fg = theme["fg"]
+        btn_bg = theme["button_bg"]
+        btn_fg = theme["button_fg"]
 
         self.root.configure(bg=bg)
+
+        # Frame config
         for frame in (self.left, self.right, self.ctrl, self.btns):
             frame.configure(bg=bg)
 
+        # Label config
         self.timerLabel.configure(bg=bg, fg=fg)
 
         # Refresh row colors based on current mode
         self.refresh_tree()
 
-        # Redraw progress bar with new theme
         self.draw_progress_bar(self.progressValue.get())
 
     # ---------- SAVE ON EXIT ----------
@@ -368,7 +378,7 @@ class Pomodoro:
         self.pauseBtn = tk.Button(self.ctrl, text="Pause", command=self.pause_resume)
         self.pauseBtn.grid(row=0, column=1, padx=5)
         tk.Button(self.ctrl, text="Stop", command=self.stop_timer).grid(row=0, column=2, padx=5)
-        tk.Button(self.ctrl, text="No Blue Ray Light pls", command=self.toggle_dark_mode).grid(row=0, column=3, padx=5)
+        tk.Button(self.ctrl, text="Switch Theme", command=self.switch_theme).grid(row=0, column=3, padx=5)
 
 
 if __name__ == "__main__":
