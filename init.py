@@ -3,25 +3,6 @@ from tkinter import ttk
 import json
 import os
 
-ROW_COLORS = [
-    "#e8f4ff", "#fff0e6", "#eaffea", "#f5e9ff", "#ffeaea",
-    "#f0fff7", "#fffbe6", "#e6f7ff", "#f9e6ff", "#eef2f7"
-]
-
-ROW_COLORS_DARK = [
-    "#1a5276",  # deep blue
-    "#6e2c00",  # rich brown
-    "#1e8449",  # forest green
-    "#6c3483",  # deep purple
-    "#922b21",  # crimson red
-    "#17a589",  # teal
-    "#f1c40f",  # golden yellow
-    "#2980b9",  # bright blue
-    "#9b59b6",  # magenta
-    "#34495e"   # slate gray
-]
-
-
 class Pomodoro:
     def __init__(self, root):
         self.root = root
@@ -80,7 +61,7 @@ class Pomodoro:
 
     def load_stats(self):
         if not os.path.exists(self.statsFile):
-            return {}  # Return empty dict if file doesn't exist
+            return {}
         with open(self.statsFile, "r") as f:
             return json.load(f)
         
@@ -252,7 +233,7 @@ class Pomodoro:
             self.current_phase = "work"
             self.start_phase()
         else:
-            self.timeString.set("🎉 Congratulations! All tasks completed!")
+            self.timeString.set("All tasks completed!")
 
     def pause_resume(self):
         if not self.timerRunning:
@@ -275,33 +256,18 @@ class Pomodoro:
         m, s = divmod(self.totalSeconds, 60)
         self.timeString.set(f"{m:02d}:{s:02d}")
 
-    # ---------- CUSTOM PROGRESS BAR WITH BEVEL EFFECT ----------
+    # ---------- PROGRESS BAR ----------
 
     def draw_progress_bar(self, percent):
-        """Draw a custom progress bar with bevel effect using Canvas"""
         width = 320
         height = 20
         fill_width = int((percent / 100) * width)
 
-        # Clear canvas
         self.canvas.delete("all")
-
-        # Set colors based on mode
-        if self.dark_mode:
-            trough_color = "#2d2d2d"
-            fill_color = "#e040fb"     # neon purple
-            highlight_color = "#f387ff" # lighter glow for bevel
-            shadow_color = "#c729e6"    # darker for depth
-        else:
-            trough_color = "#e0e0e0"
-            fill_color = "#4caf50"      # green
-            highlight_color = "#81c784" # lighter green
-            shadow_color = "#388e3c"    # darker green
 
         # Draw trough (background)
         self.canvas.create_rectangle(0, 0, width, height, fill=trough_color, outline="")
 
-        # If progress > 0, draw beveled fill
         if fill_width > 0:
             # Main fill
             self.canvas.create_rectangle(0, 0, fill_width, height, fill=fill_color, outline="")
@@ -343,7 +309,6 @@ class Pomodoro:
     # ---------- SAVE ON EXIT ----------
 
     def on_closing(self):
-        """Save sessions and close the app"""
         self.save_sessions()
         self.save_stats()
         self.root.destroy()
