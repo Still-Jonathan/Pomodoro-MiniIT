@@ -111,6 +111,39 @@ class Pomodoro:
         if not row or col == "#0":
             return
 
+        # Only allow numbers in columns 1, 2, 3 ("Task Duration", "Break", "Cycles")
+        col_index = int(col.replace("#", "")) - 1
+        if col_index not in (1, 2, 3):  # column 0 is "Task Name" → allow text
+            return self.edit_text_cell(event)
+
+        x, y, w, h = self.tree.bbox(row, col)
+        value = self.tree.set(row, col)
+
+        entry = tk.Entry(self.tree, validate="key")
+        entry.place(x=x, y=y, width=w, height=h)
+        entry.insert(0, value)
+        entry.focus()
+
+        # Register validation command
+        vcmd = (entry.register(self.validate_numeric_input), "%P")
+        entry.config(validatecommand=vcmd)
+
+        def save(_=None):
+            new_val = entry.get()
+            # Ensure at least "0" if empty
+            if new_val == "":
+                new_val = "0"
+            self.tree.set(row, col, new_val)
+            entry.destroy()
+            self.sync_tree_to_sessions()
+
+        entry.bind("<Return>", save)
+        entry.bind("<FocusOut>", save)
+
+    def edit_text_cell(self, event):
+        """Allow free text in 'Task Name' column"""
+        row = self.tree.identify_row(event.y)
+        col = self.tree.identify_column(event.x)
         x, y, w, h = self.tree.bbox(row, col)
         value = self.tree.set(row, col)
 
@@ -126,6 +159,12 @@ class Pomodoro:
 
         entry.bind("<Return>", save)
         entry.bind("<FocusOut>", save)
+
+    def validate_numeric_input(self, value_if_allowed):
+        """Allow only digits (and empty string during typing)"""
+        if value_if_allowed == "":
+            return True
+        return value_if_allowed.isdigit()
 
     def selected_index(self):
         sel = self.tree.selection()
@@ -158,6 +197,10 @@ class Pomodoro:
     # ---------- TIMER ----------
 
     def start_selected(self):
+        # ✅ FIX 1: Prevent starting if timer is already running
+        if self.timerRunning:
+            return
+
         idx = self.selected_index()
         if idx is None:
             return
@@ -362,7 +405,7 @@ class Pomodoro:
         tk.Button(self.btns, text="Add", width=6, command=self.add_task).grid(row=0, column=0, padx=3)
         tk.Button(self.btns, text="Remove", width=6, command=self.remove_task).grid(row=0, column=1, padx=3)
         tk.Button(self.btns, text="Row Colours", width=10, command=self.cycle_row_colors).grid(row=0, column=2, padx=3)
-        tk.Button(self.btns, text="Save Now", width=8, command=self.save_sessions).grid(row=0, column=3, padx=3)  # ← NEW
+        tk.Button(self.btns, text="Save Now", width=8, command=self.save_sessions).grid(row=0, column=3, padx=3)
 
         self.timerLabel = tk.Label(self.right, textvariable=self.timeString, font=("Arial", 32, "bold"))
         self.timerLabel.pack(pady=20)
