@@ -3,6 +3,8 @@ from tkinter import ttk
 import json
 import os
 
+import themeXT
+
 class Pomodoro:
     def __init__(self, root):
         self.root = root
@@ -21,13 +23,12 @@ class Pomodoro:
         self.current_row = None
         self.current_cycle = 1
         self.current_phase = "work"  # work / break
-
-        # UI state
-        self.dark_mode = False
-        self.color_offset = 0
+        
+        # Theme state
+        self.current_theme = "savana"
 
         self.timeString = tk.StringVar(value="00:00")
-        self.progressValue = tk.IntVar(value=0)  # 0-100
+        self.progressValue = tk.IntVar(value=0)
 
         # Task stats
         self.statsFile = "task_stats.json"
@@ -37,7 +38,7 @@ class Pomodoro:
         self.apply_ui_theme()
         self.refresh_tree()
 
-        # Add auto-save on window close
+        # Auto-save on window close
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
 
     # ---------- DATA ----------
