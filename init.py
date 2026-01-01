@@ -28,6 +28,7 @@ class Pomodoro:
         self.root.title("Pomodoro App — Task Tracker")
 
         self.sessionsFile = "sessions.json"
+        self.sessions = self.load_sessions()
 
         # timer state
         self.totalSeconds = 0
@@ -47,7 +48,9 @@ class Pomodoro:
         self.timeString = tk.StringVar(value="00:00")
         self.progressValue = tk.IntVar(value=0)  # 0-100
 
-        self.sessions = self.load_sessions()
+        # Task stats
+        self.statsFile = "task_stats.json"
+        self.stats = self.load_stats()
 
         self.build_ui()
         self.apply_ui_theme()
@@ -74,6 +77,16 @@ class Pomodoro:
     def save_sessions(self):
         with open(self.sessionsFile, "w") as f:
             json.dump(self.sessions, f, indent=2)
+
+    def load_stats(self):
+        if not os.path.exists(self.statsFile):
+            return {}  # Return empty dict if file doesn't exist
+        with open(self.statsFile, "r") as f:
+            return json.load(f)
+        
+    def save_stats(self):
+        with open(self.statsFile, "w") as f:
+            json.dump(self.stats, f, indent=2)
 
     # ---------- TREEVIEW ----------
 
@@ -188,6 +201,12 @@ class Pomodoro:
 
         if self.totalSeconds > 0:
             self.totalSeconds -= 1
+
+            # Tracks time for 'work' phase
+            if self.current_phase == "work":
+                task_name = self.sessions[self.current_row]["name"]
+                self.stats[task_name] = self.stats.get(task_name, 0) + 1
+
             self.update_time()
 
             progress = int(
@@ -250,6 +269,7 @@ class Pomodoro:
         self.timeString.set("00:00")
         self.pauseBtn.config(text="Pause")
         self.draw_progress_bar(0)
+        self.save_stats()
 
     def update_time(self):
         m, s = divmod(self.totalSeconds, 60)
@@ -325,6 +345,7 @@ class Pomodoro:
     def on_closing(self):
         """Save sessions and close the app"""
         self.save_sessions()
+        self.save_stats()
         self.root.destroy()
 
     # ---------- UI ----------
