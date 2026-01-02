@@ -3,15 +3,15 @@ THEMES = {
         "bg": "#EAD7A1",        # warm savana sand
         "fg": "#3B2F2F",        # dark brown text
         "button_bg": "#8D7539",
-        "button_fg": "#FFFFFF"
-    
+        "button_fg": "#FFFFFF",
+        "row_palette": "warm"
     },
     "water": {
         "bg": "#D0ECF2",        # light water blue
         "fg": "#003B44",        # deep blue text
         "button_bg": "#4FA3B5",
-        "button_fg": "#FFFFFF"
-      
+        "button_fg": "#FFFFFF",
+        "row_palette": "cool"
     }
 }
 

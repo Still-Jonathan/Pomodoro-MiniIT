@@ -74,7 +74,7 @@ class Pomodoro:
     def refresh_tree(self):
         self.tree.delete(*self.tree.get_children())
 
-        theme_data = themeXT.THEMES[self.current_theme_key]
+        theme_data = themeXT.THEMES[self.current_theme]
         colours = themeXT.ROW_COLORS_WARM if theme_data["row_palette"] == "warm" else themeXT.ROW_COLORS_COOL
 
         for i, s in enumerate(self.sessions):
@@ -262,12 +262,12 @@ class Pomodoro:
 
         self.canvas.delete("all")
 
-        theme = themeXT.THEMES[self.current_theme_key]
-        trough_color = theme["progress_trough"]
-        fill_color = theme["progress_fill"]
+        theme = themeXT.THEMES[self.current_theme]
+        #trough_color = theme["progress_trough"]
+        #fill_color = theme["progress_fill"]
 
         # Draw trough (background)
-        self.canvas.create_rectangle(0, 0, width, height, fill=trough_color, outline="")
+        self.canvas.create_rectangle(0, 0, width, height, fill="white", outline="")
 
         if fill_width > 0:
             # Main fill
