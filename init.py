@@ -23,10 +23,9 @@ class Pomodoro:
         self.current_row = None
         self.current_cycle = 1
         self.current_phase = "work"  # work / break
-        
+
         # Theme state
         self.current_theme = "savana"
-
         self.timeString = tk.StringVar(value="00:00")
         self.progressValue = tk.IntVar(value=0)
 
@@ -75,18 +74,18 @@ class Pomodoro:
     def refresh_tree(self):
         self.tree.delete(*self.tree.get_children())
 
+        theme_data = themeXT.THEMES[self.current_theme_key]
+        colours = themeXT.ROW_COLORS_WARM if theme_data["row_palette"] == "warm" else themeXT.ROW_COLORS_COOL
+
         for i, s in enumerate(self.sessions):
             tag = f"row{i}"
-            if self.dark_mode:
-                color = ROW_COLORS_DARK[(i + self.color_offset) % len(ROW_COLORS_DARK)]
-            else:
-                color = ROW_COLORS[(i + self.color_offset) % len(ROW_COLORS)]
+            colour = colours[i % len(colours)]
             self.tree.insert(
                 "", "end", iid=str(i),
                 values=(s["name"], s["Task Duration"], s["break"], s["cycles"]),
                 tags=(tag,)
             )
-            self.tree.tag_configure(tag, background=color)
+            self.tree.tag_configure(tag, background=colour)
 
     def sync_tree_to_sessions(self):
         self.sessions.clear()
@@ -146,10 +145,6 @@ class Pomodoro:
         self.refresh_tree()
         self.save_sessions()
 
-    def cycle_row_colors(self):
-        self.color_offset = (self.color_offset + 1) % len(ROW_COLORS)
-        self.refresh_tree()
-
     # ---------- TIMER ----------
 
     def start_selected(self):
@@ -174,6 +169,7 @@ class Pomodoro:
         self.progressValue.set(0)
         self.timerRunning = True
         self.paused = False
+
         self.update_time()
         self.run_timer()
 
@@ -266,6 +262,10 @@ class Pomodoro:
 
         self.canvas.delete("all")
 
+        theme = themeXT.THEMES[self.current_theme_key]
+        trough_color = theme["progress_trough"]
+        fill_color = theme["progress_fill"]
+
         # Draw trough (background)
         self.canvas.create_rectangle(0, 0, width, height, fill=trough_color, outline="")
 
@@ -274,16 +274,10 @@ class Pomodoro:
             self.canvas.create_rectangle(0, 0, fill_width, height, fill=fill_color, outline="")
 
             # Top highlight line (bevel)
-            self.canvas.create_line(0, 0, fill_width, 0, fill=highlight_color, width=1)
+            self.canvas.create_line(0, 0, fill_width, 0, fill="white", width=1)
 
             # Left highlight line (bevel)
-            self.canvas.create_line(0, 0, 0, height, fill=highlight_color, width=1)
-
-            # Bottom shadow line (bevel)
-            self.canvas.create_line(0, height-1, fill_width, height-1, fill=shadow_color, width=1)
-
-            # Right shadow line (bevel)
-            self.canvas.create_line(fill_width-1, 0, fill_width-1, height, fill=shadow_color, width=1)
+            self.canvas.create_line(0, 0, 0, height, fill="white", width=1)
 
     # ---------- Themes ----------
 
@@ -296,7 +290,7 @@ class Pomodoro:
         self.apply_ui_theme()
 
     def apply_ui_theme(self):
-        theme = themeXT.THEMES[self.current_theme_key]
+        theme = themeXT.THEMES[self.current_theme]
 
         bg = theme["bg"]
         fg = theme["fg"]
@@ -305,11 +299,11 @@ class Pomodoro:
 
         self.root.configure(bg=bg)
 
-        # Frame config
+        # Configure frame
         for frame in (self.left, self.right, self.ctrl, self.btns):
             frame.configure(bg=bg)
 
-        # Label config
+        # Configure labels
         self.timerLabel.configure(bg=bg, fg=fg)
 
         # Refresh row colors based on current mode
@@ -358,7 +352,6 @@ class Pomodoro:
 
         tk.Button(self.btns, text="Add", width=6, command=self.add_task).grid(row=0, column=0, padx=3)
         tk.Button(self.btns, text="Remove", width=6, command=self.remove_task).grid(row=0, column=1, padx=3)
-        tk.Button(self.btns, text="Row Colours", width=10, command=self.cycle_row_colors).grid(row=0, column=2, padx=3)
         tk.Button(self.btns, text="Save Now", width=8, command=self.save_sessions).grid(row=0, column=3, padx=3)  # ← NEW
 
         self.timerLabel = tk.Label(self.right, textvariable=self.timeString, font=("Arial", 32, "bold"))
