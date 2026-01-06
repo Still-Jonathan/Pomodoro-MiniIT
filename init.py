@@ -263,12 +263,13 @@ class Pomodoro:
         self.canvas.delete("all")
 
         theme = themeXT.THEMES[self.current_theme]
-        #trough_color = theme["progress_trough"]
-        #fill_color = theme["progress_fill"]
+        trough_color = theme["progress_trough"]
+        fill_color = theme["progress_fill"]
 
         # Draw trough (background)
-        self.canvas.create_rectangle(0, 0, width, height, fill="white", outline="")
+        self.canvas.create_rectangle(0, 0, width, height, fill=trough_color, outline="")
 
+        # Draw beveled fill
         if fill_width > 0:
             # Main fill
             self.canvas.create_rectangle(0, 0, fill_width, height, fill=fill_color, outline="")
@@ -347,6 +348,7 @@ class Pomodoro:
         self.tree.pack()
         self.tree.bind("<Double-1>", self.edit_cell)
 
+        # Bottom section
         self.btns = tk.Frame(self.left)
         self.btns.pack(pady=6)
 
@@ -360,9 +362,6 @@ class Pomodoro:
         # Replace ttk.Progressbar with Canvas
         self.canvas = tk.Canvas(self.right, width=320, height=20, bg="#f0f0f0", highlightthickness=0)
         self.canvas.pack(pady=10)
-
-        # Initial draw
-        self.draw_progress_bar(0)
 
         self.ctrl = tk.Frame(self.right)
         self.ctrl.pack(pady=10)
