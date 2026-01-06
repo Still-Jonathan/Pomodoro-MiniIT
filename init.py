@@ -307,7 +307,12 @@ class Pomodoro:
         # Configure labels
         self.timerLabel.configure(bg=bg, fg=fg)
 
-        # Refresh row colors based on current mode
+        # Configure Button
+        for container in (self.btns, self.ctrl):
+            for widget in container.winfo_children():
+                if isinstance(widget, tk.Button):
+                    widget.configure(bg=btn_bg, fg=btn_fg, activebackground=fg, activeforeground=bg) # 
+
         self.refresh_tree()
 
         self.draw_progress_bar(self.progressValue.get())
