@@ -3,24 +3,7 @@ from tkinter import ttk
 import json
 import os
 
-ROW_COLORS = [
-    "#e8f4ff", "#fff0e6", "#eaffea", "#f5e9ff", "#ffeaea",
-    "#f0fff7", "#fffbe6", "#e6f7ff", "#f9e6ff", "#eef2f7"
-]
-
-ROW_COLORS_DARK = [
-    "#1a5276",  # deep blue
-    "#6e2c00",  # rich brown
-    "#1e8449",  # forest green
-    "#6c3483",  # deep purple
-    "#922b21",  # crimson red
-    "#17a589",  # teal
-    "#f1c40f",  # golden yellow
-    "#2980b9",  # bright blue
-    "#9b59b6",  # magenta
-    "#34495e"   # slate gray
-]
-
+import themeXT
 
 class Pomodoro:
     def __init__(self, root):
@@ -41,12 +24,10 @@ class Pomodoro:
         self.current_cycle = 1
         self.current_phase = "work"  # work / break
 
-        # UI state
-        self.dark_mode = False
-        self.color_offset = 0
-
+        # Theme state
+        self.current_theme = "savana"
         self.timeString = tk.StringVar(value="00:00")
-        self.progressValue = tk.IntVar(value=0)  # 0-100
+        self.progressValue = tk.IntVar(value=0)
 
         # Task stats
         self.statsFile = "task_stats.json"
@@ -56,7 +37,7 @@ class Pomodoro:
         self.apply_ui_theme()
         self.refresh_tree()
 
-        # Add auto-save on window close
+        # Auto-save on window close
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
 
     # ---------- DATA ----------
@@ -80,7 +61,7 @@ class Pomodoro:
 
     def load_stats(self):
         if not os.path.exists(self.statsFile):
-            return {}  # Return empty dict if file doesn't exist
+            return {}
         with open(self.statsFile, "r") as f:
             return json.load(f)
         
@@ -93,18 +74,18 @@ class Pomodoro:
     def refresh_tree(self):
         self.tree.delete(*self.tree.get_children())
 
+        theme_data = themeXT.THEMES[self.current_theme]
+        colours = themeXT.ROW_COLORS_WARM if theme_data["row_palette"] == "warm" else themeXT.ROW_COLORS_COOL
+
         for i, s in enumerate(self.sessions):
             tag = f"row{i}"
-            if self.dark_mode:
-                color = ROW_COLORS_DARK[(i + self.color_offset) % len(ROW_COLORS_DARK)]
-            else:
-                color = ROW_COLORS[(i + self.color_offset) % len(ROW_COLORS)]
+            colour = colours[i % len(colours)]
             self.tree.insert(
                 "", "end", iid=str(i),
                 values=(s["name"], s["Task Duration"], s["break"], s["cycles"]),
                 tags=(tag,)
             )
-            self.tree.tag_configure(tag, background=color)
+            self.tree.tag_configure(tag, background=colour)
 
     def sync_tree_to_sessions(self):
         self.sessions.clear()
@@ -164,10 +145,6 @@ class Pomodoro:
         self.refresh_tree()
         self.save_sessions()
 
-    def cycle_row_colors(self):
-        self.color_offset = (self.color_offset + 1) % len(ROW_COLORS)
-        self.refresh_tree()
-
     # ---------- TIMER ----------
 
     def start_selected(self):
@@ -192,6 +169,7 @@ class Pomodoro:
         self.progressValue.set(0)
         self.timerRunning = True
         self.paused = False
+
         self.update_time()
         self.run_timer()
 
@@ -252,7 +230,7 @@ class Pomodoro:
             self.current_phase = "work"
             self.start_phase()
         else:
-            self.timeString.set("🎉 Congratulations! All tasks completed!")
+            self.timeString.set("All tasks completed!")
 
     def pause_resume(self):
         if not self.timerRunning:
@@ -275,75 +253,73 @@ class Pomodoro:
         m, s = divmod(self.totalSeconds, 60)
         self.timeString.set(f"{m:02d}:{s:02d}")
 
-    # ---------- CUSTOM PROGRESS BAR WITH BEVEL EFFECT ----------
+    # ---------- PROGRESS BAR ----------
 
     def draw_progress_bar(self, percent):
-        """Draw a custom progress bar with bevel effect using Canvas"""
         width = 320
         height = 20
         fill_width = int((percent / 100) * width)
 
-        # Clear canvas
         self.canvas.delete("all")
 
-        # Set colors based on mode
-        if self.dark_mode:
-            trough_color = "#2d2d2d"
-            fill_color = "#e040fb"     # neon purple
-            highlight_color = "#f387ff" # lighter glow for bevel
-            shadow_color = "#c729e6"    # darker for depth
-        else:
-            trough_color = "#e0e0e0"
-            fill_color = "#4caf50"      # green
-            highlight_color = "#81c784" # lighter green
-            shadow_color = "#388e3c"    # darker green
+        theme = themeXT.THEMES[self.current_theme]
+        trough_color = theme["progress_trough"]
+        fill_color = theme["progress_fill"]
 
         # Draw trough (background)
         self.canvas.create_rectangle(0, 0, width, height, fill=trough_color, outline="")
 
-        # If progress > 0, draw beveled fill
+        # Draw beveled fill
         if fill_width > 0:
             # Main fill
             self.canvas.create_rectangle(0, 0, fill_width, height, fill=fill_color, outline="")
 
             # Top highlight line (bevel)
-            self.canvas.create_line(0, 0, fill_width, 0, fill=highlight_color, width=1)
+            self.canvas.create_line(0, 0, fill_width, 0, fill="white", width=1)
 
             # Left highlight line (bevel)
-            self.canvas.create_line(0, 0, 0, height, fill=highlight_color, width=1)
+            self.canvas.create_line(0, 0, 0, height, fill="white", width=1)
 
-            # Bottom shadow line (bevel)
-            self.canvas.create_line(0, height-1, fill_width, height-1, fill=shadow_color, width=1)
+    # ---------- Themes ----------
 
-            # Right shadow line (bevel)
-            self.canvas.create_line(fill_width-1, 0, fill_width-1, height, fill=shadow_color, width=1)
+    def switch_theme(self):
+        if self.current_theme == "savana":
+            self.current_theme = "water"
+        else:
+            self.current_theme = "savana"
 
-    # ---------- DARK MODE ----------
-
-    def toggle_dark_mode(self):
-        self.dark_mode = not self.dark_mode
         self.apply_ui_theme()
 
     def apply_ui_theme(self):
-        bg = "#1e1e1e" if self.dark_mode else "#f0f0f0"
-        fg = "#ffffff" if self.dark_mode else "#000000"
+        theme = themeXT.THEMES[self.current_theme]
+
+        bg = theme["bg"]
+        fg = theme["fg"]
+        btn_bg = theme["button_bg"]
+        btn_fg = theme["button_fg"]
 
         self.root.configure(bg=bg)
+
+        # Configure frame
         for frame in (self.left, self.right, self.ctrl, self.btns):
             frame.configure(bg=bg)
 
+        # Configure labels
         self.timerLabel.configure(bg=bg, fg=fg)
 
-        # Refresh row colors based on current mode
+        # Configure Button
+        for container in (self.btns, self.ctrl):
+            for widget in container.winfo_children():
+                if isinstance(widget, tk.Button):
+                    widget.configure(bg=btn_bg, fg=btn_fg, activebackground=fg, activeforeground=bg) # 
+
         self.refresh_tree()
 
-        # Redraw progress bar with new theme
         self.draw_progress_bar(self.progressValue.get())
 
     # ---------- SAVE ON EXIT ----------
 
     def on_closing(self):
-        """Save sessions and close the app"""
         self.save_sessions()
         self.save_stats()
         self.root.destroy()
@@ -377,12 +353,12 @@ class Pomodoro:
         self.tree.pack()
         self.tree.bind("<Double-1>", self.edit_cell)
 
+        # Bottom section
         self.btns = tk.Frame(self.left)
         self.btns.pack(pady=6)
 
         tk.Button(self.btns, text="Add", width=6, command=self.add_task).grid(row=0, column=0, padx=3)
         tk.Button(self.btns, text="Remove", width=6, command=self.remove_task).grid(row=0, column=1, padx=3)
-        tk.Button(self.btns, text="Row Colours", width=10, command=self.cycle_row_colors).grid(row=0, column=2, padx=3)
         tk.Button(self.btns, text="Save Now", width=8, command=self.save_sessions).grid(row=0, column=3, padx=3)  # ← NEW
 
         self.timerLabel = tk.Label(self.right, textvariable=self.timeString, font=("Arial", 32, "bold"))
@@ -392,9 +368,6 @@ class Pomodoro:
         self.canvas = tk.Canvas(self.right, width=320, height=20, bg="#f0f0f0", highlightthickness=0)
         self.canvas.pack(pady=10)
 
-        # Initial draw
-        self.draw_progress_bar(0)
-
         self.ctrl = tk.Frame(self.right)
         self.ctrl.pack(pady=10)
 
@@ -402,7 +375,7 @@ class Pomodoro:
         self.pauseBtn = tk.Button(self.ctrl, text="Pause", command=self.pause_resume)
         self.pauseBtn.grid(row=0, column=1, padx=5)
         tk.Button(self.ctrl, text="Stop", command=self.stop_timer).grid(row=0, column=2, padx=5)
-        tk.Button(self.ctrl, text="No Blue Ray Light pls", command=self.toggle_dark_mode).grid(row=0, column=3, padx=5)
+        tk.Button(self.ctrl, text="Switch Theme", command=self.switch_theme).grid(row=0, column=3, padx=5)
 
 
 if __name__ == "__main__":
