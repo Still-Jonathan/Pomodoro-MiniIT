@@ -1,7 +1,13 @@
 {
-  "work_minutes_today": 69,
-  "sessions_completed": 6,
-  "last_active_date": "2026-01-02",
-  "current_streak": 2,
-  "theme": "dark"
+  "work_minutes_today": 66,
+  "sessions_completed": 3,
+  "last_active_date": "2026-01-01",
+  "current_streak": 1,
+  "theme": "light",
+  "history": {
+    "2026-01-01": {
+      "minutes": 66,
+      "sessions": 3
+    }
+  }
 }

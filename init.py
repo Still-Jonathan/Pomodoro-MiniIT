@@ -411,6 +411,13 @@ class Pomodoro:
 
     def toggle_dark_mode(self):
         self.dark_mode = not self.dark_mode
+        # Persist theme immediately so app will reopen with chosen theme
+        self.stats["theme"] = "dark" if self.dark_mode else "light"
+        try:
+            with open(self.statsFile, "w") as f:
+                json.dump(self.stats, f, indent=2)
+        except Exception:
+            pass
         self.apply_ui_theme()
 
     def apply_ui_theme(self):
@@ -426,6 +433,19 @@ class Pomodoro:
         self.refresh_tree()
         self.draw_progress_bar(self.progressValue.get())
         self.update_paused_label()
+        # Configure ttk styles for Treeview to match light/dark mode
+        style = ttk.Style()
+        try:
+            style.theme_use(style.theme_use())
+        except Exception:
+            pass
+        tree_bg = "#2d2d2d" if self.dark_mode else "#ffffff"
+        tree_fg = "#ffffff" if self.dark_mode else "#000000"
+        heading_bg = "#333333" if self.dark_mode else "#dddddd"
+        heading_fg = "#ffffff" if self.dark_mode else "#000000"
+        style.configure("Treeview", background=tree_bg, fieldbackground=tree_bg, foreground=tree_fg)
+        style.configure("Treeview.Heading", background=heading_bg, foreground=heading_fg)
+        style.map("Treeview", background=[("selected", "#5a9" if not self.dark_mode else "#005577")])
 
     # ================= BUILD UI =================
 
@@ -493,6 +513,8 @@ class Pomodoro:
         )
 
     def on_closing(self):
+        # Ensure theme is persisted on close
+        self.stats["theme"] = "dark" if self.dark_mode else "light"
         with open(self.sessionsFile, "w") as f:
             json.dump(self.sessions, f, indent=2)
         with open(self.statsFile, "w") as f:
