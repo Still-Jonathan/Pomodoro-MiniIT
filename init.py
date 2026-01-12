@@ -17,7 +17,7 @@ class Pomodoro:
         self.root = root
         self.root.title("Pomodoro App — Task Tracker")
 
-        # Initialize Pygame Mixer [cite: 1]
+        # Initialize Pygame Mixer
         try:
             pygame.mixer.init()
             pygame.mixer.music.set_volume(0.5)
@@ -90,7 +90,7 @@ class Pomodoro:
 
     def play_music(self):
         """Plays the currently selected sound loop."""
-        file_path = SOUNDS.get(self.current_sound_key)
+        file_path = SOUNDS.get(self.current_sound)
         if file_path and os.path.exists(file_path):
             try:
                 pygame.mixer.music.load(file_path)
@@ -361,7 +361,6 @@ class Pomodoro:
 
         # Configure labels
         self.timerLabel.configure(bg=bg, fg=fg)
-        self.task_list_label.configure(bg=bg, fg=fg)
         self.vol_label.configure(bg=bg, fg=fg)
 
         # Configure Button
