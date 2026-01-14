@@ -205,6 +205,10 @@ class Pomodoro:
         self.start_phase()
 
     def start_phase(self):
+        if self.currentJob:
+            self.root.after_cancel(self.currentJob)
+            self.currentJob = None
+
         task = self.sessions[self.current_row]
 
         if self.current_phase == "work":
@@ -295,6 +299,10 @@ class Pomodoro:
             self.run_timer()
 
     def stop_timer(self):
+        if self.currentJob:
+            self.root.after_cancel(self.currentJob)
+            self.currentJob = None
+
         self.timerRunning = False
         self.paused = False
         self.stop_music()
