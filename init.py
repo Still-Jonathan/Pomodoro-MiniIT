@@ -2,13 +2,27 @@ import tkinter as tk
 from tkinter import ttk
 import json
 import os
-
 import themeXT
+import pygame
+
+# Audio Files Configuration
+SOUNDS = {
+    "Savana": r"Audio/savana.mp3",
+    "Rain": r"Audio/Rain.mp3",
+    "Waterfall": r"Audio/waterfall.mp3"
+}
 
 class Pomodoro:
     def __init__(self, root):
         self.root = root
         self.root.title("Pomodoro App — Task Tracker")
+
+        # Initialize Pygame Mixer
+        try:
+            pygame.mixer.init()
+            pygame.mixer.music.set_volume(0.5)
+        except Exception as e:
+            print(f"Error initializing audio: {e}")
 
         self.sessionsFile = "sessions.json"
         self.sessions = self.load_sessions()
@@ -26,8 +40,11 @@ class Pomodoro:
 
         # Theme state
         self.current_theme = "savana"
+        self.current_sound = "Savana"
+
         self.timeString = tk.StringVar(value="00:00")
         self.progressValue = tk.IntVar(value=0)
+        self.volume_var = tk.IntVar(value=50)
 
         # Task stats
         self.statsFile = "task_stats.json"
@@ -68,6 +85,36 @@ class Pomodoro:
     def save_stats(self):
         with open(self.statsFile, "w") as f:
             json.dump(self.stats, f, indent=2)
+
+    # ---------- AUDIO LOGIC ----------
+
+    def play_music(self):
+        """Plays the currently selected sound loop."""
+        file_path = SOUNDS.get(self.current_sound)
+        if file_path and os.path.exists(file_path):
+            try:
+                pygame.mixer.music.load(file_path)
+                pygame.mixer.music.play(-1)        # Loop indefinitely
+            except Exception as e:
+                print(f"Error playing music: {e}")
+
+    def stop_music(self):
+        pygame.mixer.music.stop()
+
+    def pause_music(self):
+        pygame.mixer.music.pause()
+
+    def unpause_music(self):
+        pygame.mixer.music.unpause()
+
+    def change_music_selection(self, selection):
+        self.current_sound = selection
+        if self.timerRunning and not self.paused:
+            self.play_music() # Restart with new track if running
+
+    def change_volume(self, value):
+        vol = int(value) / 100
+        pygame.mixer.music.set_volume(vol)
 
     # ---------- TREEVIEW ----------
 
@@ -171,6 +218,7 @@ class Pomodoro:
         self.paused = False
 
         self.update_time()
+        self.play_music() # Start music
         self.run_timer()
 
     def run_timer(self):
@@ -199,6 +247,7 @@ class Pomodoro:
 
     def advance_phase(self):
         task = self.sessions[self.current_row]
+        self.stop_music()
 
         if self.current_phase == "work":
             if task["break"] > 0:
@@ -211,6 +260,7 @@ class Pomodoro:
 
     def finish_cycle(self):
         task = self.sessions[self.current_row]
+        self.stop_music()
 
         if self.current_cycle < task["cycles"]:
             self.current_cycle += 1
@@ -237,12 +287,17 @@ class Pomodoro:
             return
         self.paused = not self.paused
         self.pauseBtn.config(text="Resume" if self.paused else "Pause")
-        if not self.paused:
+        
+        if self.paused:
+            self.pause_music()
+        else:
+            self.unpause_music()
             self.run_timer()
 
     def stop_timer(self):
         self.timerRunning = False
         self.paused = False
+        self.stop_music()
         self.progressValue.set(0)
         self.timeString.set("00:00")
         self.pauseBtn.config(text="Pause")
@@ -306,6 +361,7 @@ class Pomodoro:
 
         # Configure labels
         self.timerLabel.configure(bg=bg, fg=fg)
+        self.vol_label.configure(bg=bg, fg=fg)
 
         # Configure Button
         for container in (self.btns, self.ctrl):
@@ -320,6 +376,7 @@ class Pomodoro:
     # ---------- SAVE ON EXIT ----------
 
     def on_closing(self):
+        self.stop_music()
         self.save_sessions()
         self.save_stats()
         self.root.destroy()
@@ -359,7 +416,30 @@ class Pomodoro:
 
         tk.Button(self.btns, text="Add", width=6, command=self.add_task).grid(row=0, column=0, padx=3)
         tk.Button(self.btns, text="Remove", width=6, command=self.remove_task).grid(row=0, column=1, padx=3)
-        tk.Button(self.btns, text="Save Now", width=8, command=self.save_sessions).grid(row=0, column=3, padx=3)  # ← NEW
+        tk.Button(self.btns, text="Save Now", width=8, command=self.save_sessions).grid(row=0, column=2, padx=3)
+
+        # AUDIO CONTROLS
+        self.audio_frame = tk.Frame(self.left)
+        self.audio_frame.pack(pady=10, fill=tk.X)
+        
+        self.vol_label = tk.Label(self.audio_frame, text="Volume")
+        self.vol_label.pack(side=tk.LEFT, padx=5)
+        
+        self.volume_slider = tk.Scale(
+            self.audio_frame, from_=0, to=100, orient="horizontal", 
+            variable=self.volume_var, command=self.change_volume, showvalue=0
+        )
+        self.volume_slider.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
+
+        self.sound_var = tk.StringVar(value="Savana")
+        self.sound_menu = tk.OptionMenu(
+            self.audio_frame, self.sound_var, *SOUNDS.keys(), command=self.change_music_selection
+        )
+        self.sound_menu.pack(side=tk.RIGHT, padx=5)
+
+        # RIGHT PANEL
+        self.right = tk.Frame(self.root, padx=20, pady=20)
+        self.right.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
 
         self.timerLabel = tk.Label(self.right, textvariable=self.timeString, font=("Arial", 32, "bold"))
         self.timerLabel.pack(pady=20)
