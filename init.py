@@ -43,6 +43,7 @@ class Pomodoro:
         self.current_sound = "Savana"
 
         self.timeString = tk.StringVar(value="00:00")
+        self.statusString = tk.StringVar(value="Ready to Start")
         self.progressValue = tk.IntVar(value=0)
         self.volume_var = tk.IntVar(value=50)
 
@@ -222,6 +223,7 @@ class Pomodoro:
         self.paused = False
 
         self.update_time()
+        self.update_status_display()
         self.play_music() # Start music
         self.run_timer()
 
@@ -273,6 +275,7 @@ class Pomodoro:
         else:
             self.timerRunning = False
             self.timeString.set("Task Done")
+            self.statusString.set("Completed")
             self.root.after(15000, self.start_next_task)
 
     def start_next_task(self):
@@ -285,6 +288,7 @@ class Pomodoro:
             self.start_phase()
         else:
             self.timeString.set("All tasks completed!")
+            self.statusString.set("All Done")
 
     def pause_resume(self):
         if not self.timerRunning:
@@ -293,8 +297,10 @@ class Pomodoro:
         self.pauseBtn.config(text="Resume" if self.paused else "Pause")
         
         if self.paused:
+            self.statusString.set("Paused")
             self.pause_music()
         else:
+            self.update_status_display()
             self.unpause_music()
             self.run_timer()
 
@@ -308,6 +314,7 @@ class Pomodoro:
         self.stop_music()
         self.progressValue.set(0)
         self.timeString.set("00:00")
+        self.statusString.set("Stopped")
         self.pauseBtn.config(text="Pause")
         self.draw_progress_bar(0)
         self.save_stats()
@@ -315,6 +322,17 @@ class Pomodoro:
     def update_time(self):
         m, s = divmod(self.totalSeconds, 60)
         self.timeString.set(f"{m:02d}:{s:02d}")
+
+    # ---------- Helps function for UI strings ----------
+    def update_status_display(self):
+        if not self.current_row:
+            self.statusString.set("Ready")
+            return
+            
+        phase_text = "Working" if self.current_phase == "work" else "Break Time"
+        total_cycles = self.sessions[self.current_row]["cycles"]
+        
+        self.statusString.set(f"{phase_text} • Cycle {self.current_cycle} / {total_cycles}")
 
     # ---------- PROGRESS BAR ----------
 
@@ -370,12 +388,14 @@ class Pomodoro:
         # Configure labels
         self.timerLabel.configure(bg=bg, fg=fg)
         self.vol_label.configure(bg=bg, fg=fg)
+        
+        self.lblStatus.configure(bg=bg, fg=fg)
 
         # Configure Button
         for container in (self.btns, self.ctrl):
             for widget in container.winfo_children():
                 if isinstance(widget, tk.Button):
-                    widget.configure(bg=btn_bg, fg=btn_fg, activebackground=fg, activeforeground=bg) # 
+                    widget.configure(bg=btn_bg, fg=btn_fg, activebackground=fg, activeforeground=bg)
 
         self.refresh_tree()
 
@@ -450,7 +470,10 @@ class Pomodoro:
         self.right.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
 
         self.timerLabel = tk.Label(self.right, textvariable=self.timeString, font=("Arial", 32, "bold"))
-        self.timerLabel.pack(pady=20)
+        self.timerLabel.pack(pady=(20, 5))
+        
+        self.lblStatus = tk.Label(self.right, textvariable=self.statusString, font=("Arial", 14))
+        self.lblStatus.pack(pady=(0, 20))
 
         # Replace ttk.Progressbar with Canvas
         self.canvas = tk.Canvas(self.right, width=320, height=20, bg="#f0f0f0", highlightthickness=0)
