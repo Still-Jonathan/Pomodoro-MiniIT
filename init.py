@@ -4,6 +4,7 @@ import json
 import os
 import themeXT
 import pygame
+from datetime import datetime
 
 # Audio Files Configuration
 SOUNDS = {
@@ -37,6 +38,7 @@ class Pomodoro:
         self.current_row = None
         self.current_cycle = 1
         self.current_phase = "work"  # work / break
+        self.current_session_seconds = 0
 
         # Theme state
         self.current_theme = "savana"
@@ -83,14 +85,39 @@ class Pomodoro:
 
     def load_stats(self):
         if not os.path.exists(self.statsFile):
-            return {}
+            return {"total_global_seconds": 0, "history": []}
+
         with open(self.statsFile, "r") as f:
-            return json.load(f)
+            data = json.load(f)
+            if "history" not in data:
+                data["history"] = []
+            if "total_global_seconds" not in data:
+                data["total_global_seconds"] = 0
+            return data
         
     def save_stats(self):
         self.stats["total_global_seconds"] = self.total_global_seconds
         with open(self.statsFile, "w") as f:
             json.dump(self.stats, f, indent=2)
+
+    def log_session(self):
+        if self.current_session_seconds > 0 and self.current_row is not None:
+            now = datetime.now()
+            #print(self.current_row)
+            task_name = self.sessions[self.current_row]["name"]
+            
+            # Only log work phases
+            if self.current_phase == "work":
+                entry = {
+                    "date": now.strftime("%Y-%m-%d"),
+                    "time": now.strftime("%H:%M:%S"),
+                    "task": task_name,
+                    "duration_seconds": self.current_session_seconds
+                }
+                self.stats["history"].append(entry)
+                print(f"Logged: {entry}") # Debug
+            
+            self.current_session_seconds = 0
 
     # ---------- AUDIO LOGIC ----------
 
@@ -223,6 +250,7 @@ class Pomodoro:
             self.phase_total = task["break"] * 60
 
         self.totalSeconds = self.phase_total
+        self.current_session_seconds = 0
         self.progressValue.set(0)
         self.timerRunning = True
         self.paused = False
@@ -243,6 +271,8 @@ class Pomodoro:
 
             # Tracks time for 'work' phase
             if self.current_phase == "work":
+                self.current_session_seconds += 1
+                
                 task_name = self.sessions[self.current_row]["name"]
                 self.stats[task_name] = self.stats.get(task_name, 0) + 1
 
@@ -259,6 +289,8 @@ class Pomodoro:
             self.advance_phase()
 
     def advance_phase(self):
+        self.log_session()
+        
         task = self.sessions[self.current_row]
         self.stop_music()
 
@@ -272,6 +304,8 @@ class Pomodoro:
             self.finish_cycle()
 
     def finish_cycle(self):
+        self.log_session()
+        
         task = self.sessions[self.current_row]
         self.stop_music()
 
@@ -315,6 +349,8 @@ class Pomodoro:
         if self.currentJob:
             self.root.after_cancel(self.currentJob)
             self.currentJob = None
+
+        self.log_session()
 
         self.timerRunning = False
         self.paused = False
@@ -419,6 +455,7 @@ class Pomodoro:
 
     def on_closing(self):
         self.stop_music()
+        self.log_session()
         self.save_sessions()
         self.save_stats()
         self.root.destroy()
