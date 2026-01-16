@@ -1,0 +1,59 @@
+import tkinter as tk
+from tkinter import filedialog
+import pygame
+
+
+pygame.mixer.init()
+pygame.mixer.music.set_volume(1.0)
+
+def play_music(file):
+    pygame.mixer.music.load(file)
+    pygame.mixer.music.play(-1)
+
+def stop_music():
+    pygame.mixer.music.stop()
+
+
+class PomodoroApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Select Music")
+
+        self.music_file = None
+
+        self.label = tk.Label(root, text="No music selected", font=("Arial", 14))
+        self.label.pack(pady=10)
+
+        self.select_btn = tk.Button(
+            root, text="Select Music", command=self.select_music
+        )
+        self.select_btn.pack(pady=5)
+
+        self.play_btn = tk.Button(
+            root, text="Play", command=self.start_music
+        )
+        self.play_btn.pack(pady=5)
+
+        self.stop_btn = tk.Button(
+            root, text="Stop", command=stop_music
+        )
+        self.stop_btn.pack(pady=5)
+
+    def select_music(self):
+        file = filedialog.askopenfilename(
+            title="Select Music File",
+            filetypes=[("Audio Files", "*.mp3 *.wav")]
+        )
+
+        if file:
+            self.music_file = file
+            self.label.config(text="Selected: " + file.split("/")[-1])
+
+    def start_music(self):
+        if self.music_file:
+            play_music(self.music_file)
+
+
+root = tk.Tk()
+app = PomodoroApp(root)
+root.mainloop()
