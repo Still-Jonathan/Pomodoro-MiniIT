@@ -1,13 +1,30 @@
 {
   "Pomodoro (25/5)": 22,
-  "total_global_seconds": 18,
+  "total_global_seconds": 30,
   "history": [
     {
       "date": "2026-01-15",
       "time": "21:25:28",
       "task": "Test 1",
       "duration_seconds": 18
+    },
+    {
+      "date": "2026-01-30",
+      "time": "12:18:58",
+      "task": "Test 1",
+      "duration_seconds": 2
+    },
+    {
+      "date": "2026-01-30",
+      "time": "12:21:56",
+      "task": "Test 2",
+      "duration_seconds": 5
+    },
+    {
+      "date": "2026-01-30",
+      "time": "12:22:23",
+      "task": "Test 2",
+      "duration_seconds": 5
     }
-  ],
-  "Test 1": 18
+  ]
 }

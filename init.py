@@ -274,7 +274,6 @@ class Pomodoro:
                 self.current_session_seconds += 1
                 
                 task_name = self.sessions[self.current_row]["name"]
-                self.stats[task_name] = self.stats.get(task_name, 0) + 1
 
             self.update_time()
 
