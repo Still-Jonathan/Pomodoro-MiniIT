@@ -4,6 +4,8 @@ import json
 import os
 import themeXT
 import pygame
+from datetime import datetime
+from plyer import notification
 
 # Audio Files Configuration
 SOUNDS = {
@@ -37,6 +39,7 @@ class Pomodoro:
         self.current_row = None
         self.current_cycle = 1
         self.current_phase = "work"  # work / break
+        self.current_session_seconds = 0 
 
         # Theme state
         self.current_theme = "savana"
@@ -83,24 +86,59 @@ class Pomodoro:
 
     def load_stats(self):
         if not os.path.exists(self.statsFile):
-            return {}
+            return {"total_global_seconds": 0, "history": []}
+            
         with open(self.statsFile, "r") as f:
-            return json.load(f)
+            data = json.load(f)
+            if "history" not in data:
+                data["history"] = []
+            if "total_global_seconds" not in data:
+                data["total_global_seconds"] = 0
+            return data
         
     def save_stats(self):
         self.stats["total_global_seconds"] = self.total_global_seconds
         with open(self.statsFile, "w") as f:
             json.dump(self.stats, f, indent=2)
 
+    def log_session(self):
+        if self.current_session_seconds > 0 and self.current_row is not None:
+            now = datetime.now()
+            task_name = self.sessions[self.current_row]["name"]
+            
+            if self.current_phase == "work":
+                entry = {
+                    "date": now.strftime("%Y-%m-%d"),
+                    "time": now.strftime("%H:%M:%S"),
+                    "task": task_name,
+                    "duration_seconds": self.current_session_seconds
+                }
+                self.stats["history"].append(entry)
+            
+            self.current_session_seconds = 0
+
+    # ---------- NOTIFICATIONS ----------
+    
+    def send_notification(self, title, message):
+        """Sends a desktop notification using plyer."""
+        try:
+            notification.notify(
+                title=title,
+                message=message,
+                app_name="Pomodoro App",
+                timeout=5  # Notification stays for 5 seconds
+            )
+        except Exception as e:
+            print(f"Notification error: {e}")
+
     # ---------- AUDIO LOGIC ----------
 
     def play_music(self):
-        """Plays the currently selected sound loop."""
         file_path = SOUNDS.get(self.current_sound)
         if file_path and os.path.exists(file_path):
             try:
                 pygame.mixer.music.load(file_path)
-                pygame.mixer.music.play(-1)        # Loop indefinitely
+                pygame.mixer.music.play(-1)
             except Exception as e:
                 print(f"Error playing music: {e}")
 
@@ -116,7 +154,7 @@ class Pomodoro:
     def change_music_selection(self, selection):
         self.current_sound = selection
         if self.timerRunning and not self.paused:
-            self.play_music() # Restart with new track if running
+            self.play_music()
 
     def change_volume(self, value):
         vol = int(value) / 100
@@ -223,13 +261,15 @@ class Pomodoro:
             self.phase_total = task["break"] * 60
 
         self.totalSeconds = self.phase_total
+        self.current_session_seconds = 0 
+        
         self.progressValue.set(0)
         self.timerRunning = True
         self.paused = False
 
         self.update_time()
         self.update_status_display()
-        self.play_music() # Start music
+        self.play_music() 
         self.run_timer()
 
     def run_timer(self):
@@ -243,6 +283,7 @@ class Pomodoro:
 
             # Tracks time for 'work' phase
             if self.current_phase == "work":
+                self.current_session_seconds += 1
                 task_name = self.sessions[self.current_row]["name"]
                 self.stats[task_name] = self.stats.get(task_name, 0) + 1
 
@@ -259,12 +300,14 @@ class Pomodoro:
             self.advance_phase()
 
     def advance_phase(self):
+        self.log_session()
         task = self.sessions[self.current_row]
         self.stop_music()
 
         if self.current_phase == "work":
             if task["break"] > 0:
                 self.current_phase = "break"
+                self.send_notification("Break Time!", f"Take {task['break']} minutes off.")
                 self.start_phase()
             else:
                 self.finish_cycle()
@@ -272,17 +315,20 @@ class Pomodoro:
             self.finish_cycle()
 
     def finish_cycle(self):
+        self.log_session()
         task = self.sessions[self.current_row]
         self.stop_music()
 
         if self.current_cycle < task["cycles"]:
             self.current_cycle += 1
             self.current_phase = "work"
+            self.send_notification("Back to Work!", f"Starting Cycle {self.current_cycle}")
             self.start_phase()
         else:
             self.timerRunning = False
             self.timeString.set("Task Done")
             self.statusString.set("Completed")
+            self.send_notification("Task Complete!", f"You finished {task['name']}")
             self.root.after(15000, self.start_next_task)
 
     def start_next_task(self):
@@ -292,10 +338,12 @@ class Pomodoro:
             self.current_row = next_row
             self.current_cycle = 1
             self.current_phase = "work"
+            self.send_notification("New Task", f"Starting: {self.sessions[next_row]['name']}")
             self.start_phase()
         else:
             self.timeString.set("All tasks completed!")
             self.statusString.set("All Done")
+            self.send_notification("All Done!", "You have finished all tasks in the list.")
 
     def pause_resume(self):
         if not self.timerRunning:
@@ -315,6 +363,8 @@ class Pomodoro:
         if self.currentJob:
             self.root.after_cancel(self.currentJob)
             self.currentJob = None
+
+        self.log_session()
 
         self.timerRunning = False
         self.paused = False
@@ -419,6 +469,7 @@ class Pomodoro:
 
     def on_closing(self):
         self.stop_music()
+        self.log_session()
         self.save_sessions()
         self.save_stats()
         self.root.destroy()
