@@ -4,6 +4,11 @@ import json
 import os
 import themeXT
 import pygame
+from datetime import datetime
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.figure import Figure
+from collections import defaultdict
 
 # Audio Files Configuration
 SOUNDS = {
@@ -53,6 +58,10 @@ class Pomodoro:
         self.statsFile = "task_stats.json"
         self.stats = self.load_stats()
         self.total_global_seconds = self.stats.get("total_global_seconds", 0)
+        if "history" not in self.stats:
+            self.stats["history"] = []
+        if "task_totals" not in self.stats:
+            self.stats["task_totals"] = {}
 
         self.build_ui()
         self.update_global_time_label()
@@ -83,12 +92,17 @@ class Pomodoro:
 
     def load_stats(self):
         if not os.path.exists(self.statsFile):
-            return {}
+            return {"history": [], "task_totals": {}}
         with open(self.statsFile, "r") as f:
-            return json.load(f)
+            data = json.load(f)
+            # Migration: convert old format to new format if needed
+            if "history" not in data:
+                data["history"] = []
+            if "task_totals" not in data:
+                data["task_totals"] = {}
+            return data
         
     def save_stats(self):
-        self.stats["total_global_seconds"] = self.total_global_seconds
         with open(self.statsFile, "w") as f:
             json.dump(self.stats, f, indent=2)
 
@@ -273,7 +287,12 @@ class Pomodoro:
 
     def finish_cycle(self):
         task = self.sessions[self.current_row]
+        task_name = task["name"]
         self.stop_music()
+
+        # Log completed task to history
+        work_duration = task["Task Duration"] * self.current_cycle
+        self.log_task_completion(task_name, work_duration)
 
         if self.current_cycle < task["cycles"]:
             self.current_cycle += 1
@@ -284,6 +303,23 @@ class Pomodoro:
             self.timeString.set("Task Done")
             self.statusString.set("Completed")
             self.root.after(15000, self.start_next_task)
+
+    def log_task_completion(self, task_name, duration_minutes):
+        """Log a completed task to history."""
+        entry = {
+            "task": task_name,
+            "duration_minutes": duration_minutes,
+            "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "date_only": datetime.now().strftime("%Y-%m-%d")
+        }
+        self.stats["history"].append(entry)
+        
+        # Update task totals
+        if task_name not in self.stats["task_totals"]:
+            self.stats["task_totals"][task_name] = 0
+        self.stats["task_totals"][task_name] += duration_minutes
+        
+        self.save_stats()
 
     def start_next_task(self):
         next_row = self.current_row + 1
@@ -346,6 +382,149 @@ class Pomodoro:
         m, s = divmod(self.total_global_seconds, 60)
         h, m = divmod(m, 60)
         self.totalTimeString.set(f"Total Focus Time: {h:02d}:{m:02d}:{s:02d}")
+
+    # ---------- HISTORY LOGGING & VISUALIZATION ----------
+
+    def show_history_graph(self):
+        """Open a new window with task history graphs."""
+        history_window = tk.Toplevel(self.root)
+        history_window.title("Task History & Statistics")
+        history_window.geometry("1000x600")
+
+        if not self.stats.get("history"):
+            tk.Label(history_window, text="No history data yet. Complete some tasks to see graphs!", 
+                    font=("Arial", 12)).pack(pady=20)
+            return
+
+        # Create notebook for tabs
+        notebook = ttk.Notebook(history_window)
+        notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        # Tab 1: Timeline Graph
+        tab1 = ttk.Frame(notebook)
+        notebook.add(tab1, text="Timeline")
+        self.create_timeline_graph(tab1)
+
+        # Tab 2: Task Breakdown
+        tab2 = ttk.Frame(notebook)
+        notebook.add(tab2, text="Task Breakdown")
+        self.create_task_breakdown_graph(tab2)
+
+        # Tab 3: Daily Statistics
+        tab3 = ttk.Frame(notebook)
+        notebook.add(tab3, text="Daily Stats")
+        self.create_daily_stats_graph(tab3)
+
+    def create_timeline_graph(self, parent):
+        """Create a timeline graph showing tasks over time."""
+        history = self.stats.get("history", [])
+        
+        if not history:
+            return
+
+        # Prepare data
+        dates = [entry["date"] for entry in history]
+        durations = [entry["duration_minutes"] for entry in history]
+        tasks = [entry["task"] for entry in history]
+
+        # Create figure
+        fig = Figure(figsize=(10, 4), dpi=100)
+        ax = fig.add_subplot(111)
+
+        # Color map for different tasks
+        unique_tasks = list(dict.fromkeys(tasks))
+        colors = plt.cm.Set3(range(len(unique_tasks)))
+        task_colors = {task: colors[i] for i, task in enumerate(unique_tasks)}
+
+        # Create bar chart
+        x_pos = range(len(dates))
+        bars = ax.bar(x_pos, durations, color=[task_colors[task] for task in tasks])
+
+        ax.set_xlabel("Task Sessions")
+        ax.set_ylabel("Duration (minutes)")
+        ax.set_title("Task Completion Timeline")
+        ax.set_xticks(x_pos)
+        ax.set_xticklabels([d.split()[0] for d in dates], rotation=45, ha='right')
+
+        # Add legend
+        legend_handles = [plt.Rectangle((0, 0), 1, 1, fc=task_colors[task]) for task in unique_tasks]
+        ax.legend(legend_handles, unique_tasks, loc='upper left', fontsize=8)
+
+        fig.tight_layout()
+
+        canvas = FigureCanvasTkAgg(fig, master=parent)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+
+    def create_task_breakdown_graph(self, parent):
+        """Create a pie chart showing time distribution by task."""
+        task_totals = self.stats.get("task_totals", {})
+
+        if not task_totals:
+            tk.Label(parent, text="No task data available", font=("Arial", 12)).pack(pady=20)
+            return
+
+        # Create figure
+        fig = Figure(figsize=(10, 4), dpi=100)
+        ax = fig.add_subplot(111)
+
+        tasks = list(task_totals.keys())
+        durations = list(task_totals.values())
+
+        # Create pie chart
+        colors = plt.cm.Set3(range(len(tasks)))
+        wedges, texts, autotexts = ax.pie(
+            durations, labels=tasks, autopct="%1.1f%%", colors=colors, startangle=90
+        )
+
+        # Make percentage text more readable
+        for autotext in autotexts:
+            autotext.set_color("black")
+            autotext.set_fontsize(8)
+
+        ax.set_title("Total Time by Task")
+
+        fig.tight_layout()
+
+        canvas = FigureCanvasTkAgg(fig, master=parent)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+
+    def create_daily_stats_graph(self, parent):
+        """Create a bar chart showing daily focus time."""
+        history = self.stats.get("history", [])
+
+        if not history:
+            return
+
+        # Group by date
+        daily_totals = defaultdict(int)
+        for entry in history:
+            date = entry.get("date_only", entry["date"].split()[0])
+            daily_totals[date] += entry["duration_minutes"]
+
+        # Sort by date
+        sorted_dates = sorted(daily_totals.keys())
+        daily_durations = [daily_totals[date] for date in sorted_dates]
+
+        # Create figure
+        fig = Figure(figsize=(10, 4), dpi=100)
+        ax = fig.add_subplot(111)
+
+        # Create bar chart
+        ax.bar(range(len(sorted_dates)), daily_durations, color="#4CAF50")
+
+        ax.set_xlabel("Date")
+        ax.set_ylabel("Total Focus Time (minutes)")
+        ax.set_title("Daily Focus Time")
+        ax.set_xticks(range(len(sorted_dates)))
+        ax.set_xticklabels(sorted_dates, rotation=45, ha='right')
+
+        fig.tight_layout()
+
+        canvas = FigureCanvasTkAgg(fig, master=parent)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
     # ---------- PROGRESS BAR ----------
 
@@ -501,6 +680,7 @@ class Pomodoro:
         self.pauseBtn.grid(row=0, column=1, padx=5)
         tk.Button(self.ctrl, text="Stop", command=self.stop_timer).grid(row=0, column=2, padx=5)
         tk.Button(self.ctrl, text="Switch Theme", command=self.switch_theme).grid(row=0, column=3, padx=5)
+        tk.Button(self.ctrl, text="View History", command=self.show_history_graph).grid(row=0, column=4, padx=5)
         
         # Total cumulative time label at the bottom
         self.lblTotalTime = tk.Label(self.right, textvariable=self.totalTimeString, font=("Arial", 10, "italic"))
