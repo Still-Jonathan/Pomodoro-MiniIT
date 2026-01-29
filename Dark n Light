@@ -1,0 +1,62 @@
+import tkinter as tk
+
+
+THEMES = {
+    "light": {
+        "bg": "#FFFFFF",
+        "fg": "#000000",
+        "button_bg": "#E0E0E0",
+        "button_fg": "#100F0F"
+    },
+    "dark": {
+        "bg": "#1E1E1E",
+        "fg": "#FFFFFF",
+        "button_bg": "#333333",
+        "button_fg": "#FFFFFF"
+    }
+}
+
+
+class ThemeApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Light / Dark Theme")
+
+        self.current_theme = "light"
+
+        self.label = tk.Label(root, text="Pomodoro App", font=("Arial", 20))
+        self.label.pack(pady=20)
+
+        self.toggle_btn = tk.Button(
+            root,
+            text="Switch Theme",
+            command=self.switch_theme
+        )
+        self.toggle_btn.pack(pady=10)
+
+        self.apply_theme(self.current_theme)
+
+    def apply_theme(self, theme_name):
+        theme = THEMES[theme_name]
+
+        self.root.configure(bg=theme["bg"])
+        self.label.configure(bg=theme["bg"], fg=theme["fg"])
+        self.toggle_btn.configure(
+            bg=theme["button_bg"],
+            fg=theme["button_fg"],
+            activebackground=theme["fg"],
+            activeforeground=theme["bg"]
+        )
+
+    def switch_theme(self):
+        self.current_theme = "dark" if self.current_theme == "light" else "light"
+        self.apply_theme(self.current_theme)
+
+
+# --------------------
+# RUN
+# --------------------
+root = tk.Tk()
+root.geometry("300x200")
+app = ThemeApp(root)
+root.mainloop()
