@@ -8,9 +8,17 @@
       "duration_minutes": 1,
       "date": "2026-01-24 22:53:43",
       "date_only": "2026-01-24"
+    },
+    {
+      "task": "Test 2.5",
+      "duration_minutes": 1,
+      "date": "2026-01-30 13:14:32",
+      "date_only": "2026-01-30"
     }
   ],
   "task_totals": {
-    "Test 2": 1
-  }
+    "Test 2": 1,
+    "Test 2.5": 1
+  },
+  "Test 2.5": 60
 }
