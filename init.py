@@ -481,7 +481,7 @@ class Pomodoro:
         self.left.pack(side=tk.LEFT, fill=tk.Y)
 
         self.right = tk.Frame(self.root, padx=20, pady=20)
-        self.right.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+        self.right.pack(side=tk.RIGHT, fill=tk.BOTH)
 
         tk.Label(self.left, text="Task List", font=("Arial", 14, "bold")).pack()
 
