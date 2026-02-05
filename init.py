@@ -599,6 +599,18 @@ class Pomodoro:
         self.timerLabel.configure(bg=theme["bg"], fg=theme["fg"])
         self.canvas.configure(bg=theme["progress_trough"])
         
+        style = ttk.Style()
+        style.configure(
+        "Treeview",
+        foreground=theme["fg"],
+        font=("Arial", 10)
+        )
+        style.configure(
+        "Treeview.Heading",
+        foreground=theme["fg"],
+        font=("Arial", 10, "bold")
+        )
+
         # Update all buttons in ctrl frame
         for btn in self.ctrl.winfo_children():
             if isinstance(btn, tk.Button):
