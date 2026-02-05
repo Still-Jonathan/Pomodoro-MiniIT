@@ -478,7 +478,7 @@ class Pomodoro:
 
     def build_ui(self):
         self.left = tk.Frame(self.root, padx=10, pady=10)
-        self.left.pack(side=tk.LEFT, fill=tk.Y)
+        self.left.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
         self.right = tk.Frame(self.root, padx=20, pady=20)
         self.right.pack(side=tk.RIGHT, fill=tk.BOTH)
@@ -500,7 +500,7 @@ class Pomodoro:
             self.tree.column(col, width=w, anchor="center")
 
         self.tree.column("Task Name", anchor="w")
-        self.tree.pack()
+        self.tree.pack(fill=tk.BOTH, expand=True, pady=(5, 0))
         self.tree.bind("<Double-1>", self.edit_cell)
 
         # Bottom section
