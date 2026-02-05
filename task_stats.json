@@ -1,5 +1,44 @@
 {
   "Pomodoro (25/5)": 22,
-  "history": [],
-  "total_global_seconds": 0
+  "history": [
+    {
+      "date": "2026-02-06",
+      "time": "03:00:28",
+      "task": "Test 1",
+      "duration_seconds": 60
+    },
+    {
+      "date": "2026-02-06",
+      "time": "03:02:29",
+      "task": "Test 1",
+      "duration_seconds": 60
+    },
+    {
+      "date": "2026-02-06",
+      "time": "03:04:29",
+      "task": "Test 1",
+      "duration_seconds": 60
+    },
+    {
+      "date": "2026-02-06",
+      "time": "03:06:29",
+      "task": "Test 1",
+      "duration_seconds": 60
+    },
+    {
+      "date": "2026-02-06",
+      "time": "03:08:29",
+      "task": "Test 1",
+      "duration_seconds": 60
+    },
+    {
+      "date": "2026-02-06",
+      "time": "03:09:51",
+      "task": "Test 2",
+      "duration_seconds": 6
+    }
+  ],
+  "total_global_seconds": 606,
+  "Test 1": 300,
+  "Test 2": 6
 }
