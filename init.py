@@ -109,6 +109,19 @@ class Pomodoro:
         with open(self.statsFile, "w") as f:
             json.dump(self.stats, f, indent=2)
 
+    def reset_stats(self):
+        """Clears all historical data and resets global focus time."""
+        if messagebox.askyesno("Reset History", "Are you sure you want to delete all task history and reset focus time? This cannot be undone."):
+            self.stats = {
+                "total_global_seconds": 0,
+                "history": [],
+                "task_totals": {}
+            }
+            self.total_global_seconds = 0
+            self.save_stats()
+            self.update_global_time_label()
+            messagebox.showinfo("Reset Successful", "Task history has been cleared.")
+
     # ---------- NOTIFICATIONS ----------
     
     def send_notification(self, title, message):
@@ -838,6 +851,7 @@ class Pomodoro:
         tk.Button(self.btns, text="Add", width=6, command=self.add_task).grid(row=0, column=0, padx=3)
         tk.Button(self.btns, text="Remove", width=6, command=self.remove_task).grid(row=0, column=1, padx=3)
         tk.Button(self.btns, text="Save Now", width=8, command=self.save_sessions).grid(row=0, column=2, padx=3)
+        tk.Button(self.btns, text="Reset History", command=self.reset_stats).grid(row=0, column=5, padx=5)
 
         # AUDIO CONTROLS
         tk.Label(self.left, text="Audio Settings", font=("Arial", 12, "bold")).pack(pady=(15, 5))
