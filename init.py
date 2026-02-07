@@ -109,22 +109,6 @@ class Pomodoro:
         with open(self.statsFile, "w") as f:
             json.dump(self.stats, f, indent=2)
 
-    def log_session(self):
-        if self.current_session_seconds > 0 and self.current_row is not None:
-            now = datetime.now()
-            task_name = self.sessions[self.current_row]["name"]
-            
-            if self.current_phase == "work":
-                entry = {
-                    "date": now.strftime("%Y-%m-%d"),
-                    "time": now.strftime("%H:%M:%S"),
-                    "task": task_name,
-                    "duration_seconds": self.current_session_seconds
-                }
-                self.stats["history"].append(entry)
-            
-            self.current_session_seconds = 0
-
     # ---------- NOTIFICATIONS ----------
     
     def send_notification(self, title, message):
@@ -441,12 +425,6 @@ class Pomodoro:
             self.total_global_seconds += 1
             self.update_global_time_label()
 
-            # Tracks time for 'work' phase
-            if self.current_phase == "work":
-                self.current_session_seconds += 1
-                task_name = self.sessions[self.current_row]["name"]
-                self.stats[task_name] = self.stats.get(task_name, 0) + 1
-
             self.update_time()
 
             progress = int(
@@ -460,7 +438,6 @@ class Pomodoro:
             self.advance_phase()
 
     def advance_phase(self):
-        self.log_session()
         task = self.sessions[self.current_row]
         self.stop_music()
 
@@ -475,7 +452,6 @@ class Pomodoro:
             self.finish_cycle()
 
     def finish_cycle(self):
-        self.log_session()
         task = self.sessions[self.current_row]
         task_name = task["name"]
         self.stop_music()
@@ -545,8 +521,6 @@ class Pomodoro:
         if self.currentJob:
             self.root.after_cancel(self.currentJob)
             self.currentJob = None
-
-        self.log_session()
 
         self.timerRunning = False
         self.paused = False
@@ -804,7 +778,6 @@ class Pomodoro:
 
     def on_closing(self):
         self.stop_music()
-        self.log_session()
         self.save_sessions()
         self.save_stats()
         self.save_custom_sounds()
