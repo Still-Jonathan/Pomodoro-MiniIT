@@ -590,35 +590,54 @@ class Pomodoro:
         history = self.stats.get("history", [])
         
         if not history:
+            tk.Label(parent, text="No history data available.", font=("Arial", 12)).pack(pady=20)
             return
 
         # Prepare data
-        dates = [entry["date"] for entry in history]
-        durations = [entry["duration_minutes"] for entry in history]
-        tasks = [entry["task"] for entry in history]
+        daily_breakdown = defaultdict(lambda: defaultdict(int))
+        all_tasks = set()
 
+        for entry in history:
+            date_str = entry.get("date_only", entry["date"].split()[0])
+            task_name = entry["task"]
+            duration = entry["duration_minutes"]
+            
+            daily_breakdown[date_str][task_name] += duration
+            all_tasks.add(task_name)
+
+        sorted_dates = sorted(daily_breakdown.keys())
+        sorted_tasks = sorted(list(all_tasks))
+        
         # Create figure
         fig = Figure(figsize=(10, 4), dpi=100)
         ax = fig.add_subplot(111)
 
         # Color map for different tasks
-        unique_tasks = list(dict.fromkeys(tasks))
-        colors = plt.cm.Set3(range(len(unique_tasks)))
-        task_colors = {task: colors[i] for i, task in enumerate(unique_tasks)}
+        colors = plt.cm.Set3(range(len(sorted_tasks)))
+        task_colors = {task: colors[i] for i, task in enumerate(sorted_tasks)}
 
-        # Create bar chart
-        x_pos = range(len(dates))
-        bars = ax.bar(x_pos, durations, color=[task_colors[task] for task in tasks])
+        bottoms = [0] * len(sorted_dates)
 
-        ax.set_xlabel("Task Sessions")
+        for task in sorted_tasks:
+            task_durations = [daily_breakdown[d].get(task, 0) for d in sorted_dates]
+            
+            ax.bar(
+                sorted_dates, 
+                task_durations, 
+                bottom=bottoms, 
+                label=task, 
+                color=task_colors[task]
+            )
+            bottoms = [sum(x) for x in zip(bottoms, task_durations)]
+
+        ax.set_xlabel("Date")
         ax.set_ylabel("Duration (minutes)")
-        ax.set_title("Task Completion Timeline")
-        ax.set_xticks(x_pos)
-        ax.set_xticklabels([d.split()[0] for d in dates], rotation=45, ha='right')
+        ax.set_title("Daily Activity by Task")
+        ax.set_xticks(range(len(sorted_dates)))
+        ax.set_xticklabels(sorted_dates, rotation=45, ha='right')
 
         # Add legend
-        legend_handles = [plt.Rectangle((0, 0), 1, 1, fc=task_colors[task]) for task in unique_tasks]
-        ax.legend(legend_handles, unique_tasks, loc='upper left', fontsize=8)
+        ax.legend(loc='upper left', bbox_to_anchor=(1, 1), fontsize='small')
 
         fig.tight_layout()
 
