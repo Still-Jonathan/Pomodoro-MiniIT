@@ -4,6 +4,12 @@ import json
 import os
 import themeXT
 import pygame
+from datetime import datetime
+from plyer import notification
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.figure import Figure
+from collections import defaultdict
 
 # Audio Files Configuration
 DEFAULT_SOUNDS = {
